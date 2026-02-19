@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 router.use(authenticate);
+router.use(requireRole('gerant'));
 
 router.get('/summary', async (req, res) => {
   const { from, to } = req.query;
@@ -34,9 +35,10 @@ router.get('/summary', async (req, res) => {
   }
 
   const totalCredit = await prisma.customer.aggregate({ _sum: { creditBalance: true } });
-  const lowStockCount = await prisma.product.count({
-    where: { quantity: { lte: prisma.product.fields ? 5 : 5 } },
+  const allProducts = await prisma.product.findMany({
+    select: { quantity: true, alertThreshold: true },
   });
+  const lowStockCount = allProducts.filter((p) => p.quantity <= p.alertThreshold).length;
 
   res.json({
     totalRevenue,

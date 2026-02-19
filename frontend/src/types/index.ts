@@ -3,7 +3,9 @@ export type UserRole = 'gerant' | 'vendeur';
 export type PaymentMethod = 'cash' | 'credit' | 'mobile';
 export type SaleStatus = 'completed' | 'cancelled';
 export type OrderStatus = 'en_attente' | 'recue' | 'annulee';
-export type StockMovementType = 'entree' | 'sortie' | 'ajustement';
+export type CustomerOrderStatus = 'en_attente' | 'livree' | 'annulee';
+export type StockMovementType = 'entree' | 'sortie' | 'ajustement' | 'retour';
+export type ProductUsage = 'vente' | 'achat' | 'achat_vente';
 
 interface SyncFields {
   createdAt: string;
@@ -19,6 +21,7 @@ export interface User extends SyncFields {
   password?: string;
   role: UserRole;
   active: boolean;
+  mustChangePassword?: boolean;
   deleted?: boolean;
 }
 
@@ -36,6 +39,17 @@ export interface Product extends SyncFields {
   sellPrice: number;
   quantity: number;
   alertThreshold: number;
+  usage?: ProductUsage;
+}
+
+export interface PriceHistory extends SyncFields {
+  id: string;
+  productId: string;
+  oldBuyPrice: number;
+  newBuyPrice: number;
+  oldSellPrice: number;
+  newSellPrice: number;
+  userId?: string;
 }
 
 export interface Customer extends SyncFields {
@@ -79,6 +93,7 @@ export interface SupplierOrder extends SyncFields {
   date: string;
   total: number;
   status: OrderStatus;
+  userId?: string;
 }
 
 export interface OrderItem extends SyncFields {
@@ -99,6 +114,7 @@ export interface StockMovement extends SyncFields {
   quantity: number;
   date: string;
   reason: string;
+  userId?: string;
 }
 
 export interface CreditTransaction extends SyncFields {
@@ -109,6 +125,28 @@ export interface CreditTransaction extends SyncFields {
   type: 'credit' | 'payment';
   date: string;
   note?: string;
+}
+
+export interface CustomerOrder extends SyncFields {
+  id: string;
+  customerId: string;
+  date: string;
+  total: number;
+  deposit: number;
+  status: CustomerOrderStatus;
+  saleId?: string;
+  note?: string;
+  userId?: string;
+}
+
+export interface CustomerOrderItem extends SyncFields {
+  id: string;
+  customerOrderId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
 }
 
 export type ExpenseCategory =
@@ -131,6 +169,7 @@ export interface Expense extends SyncFields {
   description: string;
   date: string;
   recurring: boolean;
+  userId?: string;
 }
 
 export type AuditAction =
@@ -145,6 +184,8 @@ export type AuditAction =
   | 'paiement'
   | 'reception_commande'
   | 'creation_commande'
+  | 'livraison_commande'
+  | 'annulation_commande'
   | 'activation'
   | 'desactivation'
   | 'depense';
@@ -158,6 +199,7 @@ export type AuditEntity =
   | 'vente'
   | 'stock'
   | 'commande'
+  | 'commande_client'
   | 'credit'
   | 'depense';
 

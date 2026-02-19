@@ -1,24 +1,37 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/authStore';
 import { db } from '@/db';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { generateId, nowISO } from '@/lib/utils';
 import { logAction } from '@/services/auditService';
+import { syncAll } from '@/services/syncService';
+import { Logo } from '@/components/ui/Logo';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('');
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
+
+  const redirectAfterLogin = (user: { mustChangePassword?: boolean }) => {
+    if (user.mustChangePassword) {
+      navigate('/change-password');
+    } else {
+      navigate('/');
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    setSyncStatus('');
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -31,61 +44,81 @@ export function LoginPage() {
         const data = await res.json();
         login(data.user, data.token, data.refreshToken);
         await logAction({ action: 'connexion', entity: 'utilisateur', entityName: data.user.name });
-        navigate('/');
+        setSyncStatus('Synchronisation des données…');
+        const syncResult = await syncAll({ force: true });
+        if (syncResult.success) {
+          toast.success(`Connecté en ligne — ${syncResult.pulled ?? 0} enregistrements synchronisés`);
+        } else {
+          toast.error(`Connexion en ligne mais sync échouée: ${syncResult.error}`);
+        }
+        redirectAfterLogin(data.user);
         return;
       }
 
       if (res.status === 401) {
         setError('Email ou mot de passe incorrect');
       } else {
-        throw new Error();
+        throw new Error(`Serveur a répondu ${res.status}`);
       }
-    } catch {
-      const defaultAccounts: Record<string, { name: string; role: 'gerant' | 'vendeur' }> = {
-        'admin@store.com:admin123': { name: 'Administrateur', role: 'gerant' },
-        'vendeur@store.com:vendeur123': { name: 'Vendeur', role: 'vendeur' },
-      };
-      const key = `${email}:${password}`;
-      const defaultAccount = defaultAccounts[key];
+    } catch (fetchErr) {
+      const reason = (fetchErr as Error).message || 'Serveur injoignable';
 
-      if (defaultAccount) {
+      const localUser = await db.users.where('email').equals(email).first();
+
+      if (localUser && localUser.deleted) {
+        setError('Ce compte a été supprimé. Contactez le gérant.');
+        return;
+      }
+
+      if (localUser && !localUser.active) {
+        setError('Ce compte a été désactivé. Contactez le gérant.');
+        return;
+      }
+
+      if (localUser && localUser.active) {
+        let passwordMatch = false;
+        const storedPwd = localUser.password ?? '';
+        if (storedPwd.startsWith('$2')) {
+          const { default: bcrypt } = await import('bcryptjs');
+          passwordMatch = await bcrypt.compare(password, storedPwd);
+        } else {
+          passwordMatch = storedPwd === password;
+        }
+        if (passwordMatch) {
+          login(localUser, 'offline-token', 'offline-refresh');
+          await logAction({ action: 'connexion', entity: 'utilisateur', entityName: localUser.name, details: `Connexion hors-ligne: ${reason}` });
+          toast.warning('Mode hors-ligne — les données ne seront pas synchronisées', { duration: 6000 });
+          redirectAfterLogin(localUser);
+          return;
+        }
+        setError('Mot de passe incorrect');
+        return;
+      }
+
+      const isDefault = email === 'admin@store.com' && password === 'admin123';
+      if (isDefault) {
         const now = nowISO();
         const existing = await db.users.where('email').equals(email).first();
         const userData = existing ?? {
           id: generateId(),
-          name: defaultAccount.name,
+          name: 'Gérant',
           email,
-          role: defaultAccount.role,
+          role: 'gerant' as const,
           active: true,
+          mustChangePassword: true,
           createdAt: now,
           updatedAt: now,
-          syncStatus: 'pending',
+          syncStatus: 'pending' as const,
         };
-
-        if (!existing) {
-          await db.users.add(userData);
-        }
-
+        if (!existing) await db.users.add(userData);
         login(userData, 'offline-token', 'offline-refresh');
-        await logAction({ action: 'connexion', entity: 'utilisateur', entityName: defaultAccount.name, details: 'Connexion hors-ligne' });
-        navigate('/');
+        await logAction({ action: 'connexion', entity: 'utilisateur', entityName: 'Gérant', details: `Connexion hors-ligne (défaut): ${reason}` });
+        toast.warning('Mode hors-ligne — les données ne seront pas synchronisées', { duration: 6000 });
+        redirectAfterLogin(userData);
         return;
       }
 
-      const localUser = await db.users.where('email').equals(email).first();
-      if (localUser && localUser.deleted) {
-        setError('Ce compte a été supprimé. Contactez le gérant.');
-      } else if (localUser && localUser.password === password && localUser.active) {
-        login(localUser, 'offline-token', 'offline-refresh');
-        await logAction({ action: 'connexion', entity: 'utilisateur', entityName: localUser.name, details: 'Connexion hors-ligne (compte local)' });
-        navigate('/');
-      } else if (localUser && !localUser.active) {
-        setError('Ce compte a été désactivé. Contactez le gérant.');
-      } else if (localUser) {
-        setError('Mot de passe incorrect');
-      } else {
-        setError('Aucun compte trouvé avec cet email.\nComptes par défaut :\n• Gérant : admin@store.com / admin123\n• Vendeur : vendeur@store.com / vendeur123');
-      }
+      setError(`Impossible de joindre le serveur (${reason}). Aucun compte local trouvé pour cet email.`);
     } finally {
       setLoading(false);
     }
@@ -94,9 +127,9 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-dark to-primary p-4">
       <div className="w-full max-w-md bg-surface rounded-2xl shadow-2xl p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-primary-dark">GestionStore</h1>
-          <p className="text-text-muted mt-2">Connectez-vous à votre boutique</p>
+        <div className="flex flex-col items-center mb-8">
+          <Logo size="lg" variant="dark" />
+          <p className="text-text-muted mt-3">Connectez-vous à votre boutique</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -104,7 +137,7 @@ export function LoginPage() {
             id="email"
             label="Email"
             type="email"
-            placeholder="admin@store.com"
+            placeholder="votre@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -120,11 +153,11 @@ export function LoginPage() {
           />
 
           {error && (
-            <div className="bg-red-50 text-danger text-sm p-3 rounded-lg">{error}</div>
+            <div className="bg-red-50 dark:bg-red-900/30 text-danger text-sm p-3 rounded-lg">{error}</div>
           )}
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Connexion...' : 'Se connecter'}
+            {loading ? (syncStatus || 'Connexion...') : 'Se connecter'}
           </Button>
         </form>
 

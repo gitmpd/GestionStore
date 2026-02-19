@@ -10,6 +10,7 @@ router.use(authenticate);
 interface SyncPayload {
   table: string;
   records: Record<string, unknown>[];
+  deletions?: string[];
   lastSyncedAt?: string;
 }
 
@@ -27,41 +28,64 @@ const tableMap: Record<string, any> = {
   creditTransactions: 'creditTransaction',
   auditLogs: 'auditLog',
   expenses: 'expense',
+  customerOrders: 'customerOrder',
+  customerOrderItems: 'customerOrderItem',
+  priceHistory: 'priceHistory',
 };
+
+const tablesWithoutUpdatedAt = new Set(['priceHistory']);
 
 router.post('/', async (req: AuthRequest, res) => {
   try {
     const { changes }: { changes: SyncPayload[] } = req.body;
-    const results: Record<string, { pushed: number; pulled: Record<string, unknown>[] }> = {};
+    const results: Record<string, { pushed: number; deleted: number; pulled: Record<string, unknown>[] }> = {};
 
-    for (const { table, records, lastSyncedAt } of changes) {
+    for (const { table, records, deletions, lastSyncedAt } of changes) {
       const modelName = tableMap[table];
       if (!modelName) continue;
 
       const model = (prisma as any)[modelName];
       let pushed = 0;
+      let deleted = 0;
 
-      for (const record of records) {
-        const { syncStatus, lastSyncedAt: _, ...data } = record as any;
-        try {
-          await model.upsert({
-            where: { id: data.id },
-            update: { ...data, syncStatus: 'synced', lastSyncedAt: new Date() },
-            create: { ...data, syncStatus: 'synced', lastSyncedAt: new Date() },
-          });
-          pushed++;
-        } catch (err) {
-          console.error(`Sync error for ${table}:`, (err as Error).message);
+      try {
+        if (deletions && deletions.length > 0) {
+          for (const recordId of deletions) {
+            try {
+              await model.delete({ where: { id: recordId } });
+              deleted++;
+            } catch (err) {
+              console.error(`Sync delete error for ${table}/${recordId}:`, (err as Error).message);
+            }
+          }
         }
-      }
 
-      const pullWhere: Record<string, unknown> = {};
-      if (lastSyncedAt) {
-        pullWhere.updatedAt = { gt: new Date(lastSyncedAt) };
-      }
+        for (const record of records) {
+          const { syncStatus, lastSyncedAt: _, ...data } = record as any;
+          try {
+            await model.upsert({
+              where: { id: data.id },
+              update: { ...data, syncStatus: 'synced', lastSyncedAt: new Date() },
+              create: { ...data, syncStatus: 'synced', lastSyncedAt: new Date() },
+            });
+            pushed++;
+          } catch (err) {
+            console.error(`Sync push error for ${table}:`, (err as Error).message);
+          }
+        }
 
-      const pulled = await model.findMany({ where: pullWhere });
-      results[table] = { pushed, pulled };
+        const pullWhere: Record<string, unknown> = {};
+        if (lastSyncedAt) {
+          const dateField = tablesWithoutUpdatedAt.has(table) ? 'createdAt' : 'updatedAt';
+          pullWhere[dateField] = { gt: new Date(lastSyncedAt) };
+        }
+
+        const pulled = await model.findMany({ where: pullWhere });
+        results[table] = { pushed, deleted, pulled };
+      } catch (err) {
+        console.error(`Sync error for table ${table}:`, (err as Error).message);
+        results[table] = { pushed, deleted, pulled: [] };
+      }
     }
 
     res.json({ success: true, results });

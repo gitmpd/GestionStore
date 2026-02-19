@@ -1,5 +1,6 @@
 import { db } from '@/db';
 import { useAuthStore } from '@/stores/authStore';
+import { v4 as uuidv4 } from 'uuid';
 
 const TABLES = [
   'users',
@@ -15,6 +16,9 @@ const TABLES = [
   'creditTransactions',
   'auditLogs',
   'expenses',
+  'customerOrders',
+  'customerOrderItems',
+  'priceHistory',
 ] as const;
 
 type TableName = (typeof TABLES)[number];
@@ -24,7 +28,7 @@ function getTable(name: TableName) {
 }
 
 function getServerUrl(): string {
-  return localStorage.getItem('sync_server_url') || '';
+  return localStorage.getItem('sync_server_url') || window.location.origin;
 }
 
 function getAuthHeaders(): Record<string, string> {
@@ -35,22 +39,46 @@ function getAuthHeaders(): Record<string, string> {
   };
 }
 
-export async function syncAll(): Promise<{ success: boolean; error?: string }> {
+export async function trackDeletion(table: string, recordId: string): Promise<void> {
+  await db.syncDeletions.add({
+    id: uuidv4(),
+    table,
+    recordId,
+    deletedAt: new Date().toISOString(),
+  });
+}
+
+export async function syncAll(options?: { force?: boolean }): Promise<{ success: boolean; error?: string; pulled?: number }> {
   const serverUrl = getServerUrl();
   if (!serverUrl) return { success: false, error: 'Serveur non configuré' };
   if (!navigator.onLine) return { success: false, error: 'Hors ligne' };
 
+  const token = useAuthStore.getState().token;
+  if (!token || token === 'offline-token') {
+    return { success: false, error: 'Token hors-ligne — reconnectez-vous en ligne' };
+  }
+
+  if (options?.force) {
+    for (const t of TABLES) localStorage.removeItem(`lastSync_${t}`);
+  }
+
   try {
     const changes = [];
+    const pendingDeletions = await db.syncDeletions.toArray();
 
     for (const tableName of TABLES) {
       const table = getTable(tableName);
       const pendingRecords = await table.where('syncStatus').equals('pending').toArray();
       const lastSync = localStorage.getItem(`lastSync_${tableName}`);
 
+      const tableDeletions = pendingDeletions
+        .filter((d) => d.table === tableName)
+        .map((d) => d.recordId);
+
       changes.push({
         table: tableName,
         records: pendingRecords,
+        deletions: tableDeletions,
         lastSyncedAt: lastSync || undefined,
       });
     }
@@ -61,9 +89,15 @@ export async function syncAll(): Promise<{ success: boolean; error?: string }> {
       body: JSON.stringify({ changes }),
     });
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${body.slice(0, 100)}`);
+    }
     const data = await res.json();
 
+    const deletedIds = new Set(pendingDeletions.map((d) => d.recordId));
+
+    let totalPulled = 0;
     const now = new Date().toISOString();
     for (const tableName of TABLES) {
       const result = data.results?.[tableName];
@@ -78,14 +112,30 @@ export async function syncAll(): Promise<{ success: boolean; error?: string }> {
         } as never);
       }
 
+      let storedCount = 0;
       for (const remote of result.pulled) {
-        await table.put(remote as never);
+        const remoteId = (remote as { id: string }).id;
+        if (!deletedIds.has(remoteId)) {
+          try {
+            await table.put(remote as never);
+            storedCount++;
+            totalPulled++;
+          } catch (putErr) {
+            console.error(`Sync put error for ${tableName}/${remoteId}:`, putErr);
+          }
+        }
       }
 
-      localStorage.setItem(`lastSync_${tableName}`, now);
+      if (storedCount > 0 || result.pulled.length === 0) {
+        localStorage.setItem(`lastSync_${tableName}`, now);
+      }
     }
 
-    return { success: true };
+    if (pendingDeletions.length > 0) {
+      await db.syncDeletions.bulkDelete(pendingDeletions.map((d) => d.id));
+    }
+
+    return { success: true, pulled: totalPulled };
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }

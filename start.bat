@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ============================================
-echo   GestionStore - Demarrage
+echo   GestionStore - Demarrage (Frontend)
 echo ============================================
 echo.
 
@@ -12,7 +12,7 @@ if not exist "frontend\node_modules" (
     exit /b 1
 )
 
-echo Demarrage de l'application...
+echo Demarrage du frontend...
 echo.
 echo   L'application sera accessible sur :
 echo   http://localhost:5173

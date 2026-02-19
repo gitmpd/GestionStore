@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -34,6 +36,7 @@ function getStartDate(period: Period): Date {
 }
 
 export function ReportsPage() {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<Period>('30d');
 
   const sales = useLiveQuery(() => db.sales.toArray()) ?? [];
@@ -143,7 +146,12 @@ export function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-text">Rapports</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-text-muted hover:text-text transition-colors" title="Retour">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-2xl font-bold text-text">Rapports</h1>
+        </div>
         <div className="flex gap-2">
           {(['7d', '30d', '90d'] as const).map((p) => (
             <button
@@ -152,7 +160,7 @@ export function ReportsPage() {
               className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                 period === p
                   ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border text-text-muted hover:bg-slate-50'
+                  : 'border-border text-text-muted hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}
             >
               {p === '7d' ? '7 jours' : p === '30d' ? '30 jours' : '90 jours'}

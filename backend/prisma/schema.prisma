@@ -35,24 +35,38 @@ enum OrderStatus {
   annulee
 }
 
+enum CustomerOrderStatus {
+  en_attente
+  livree
+  annulee
+}
+
 enum StockMovementType {
   entree
   sortie
   ajustement
+  retour
+}
+
+enum ProductUsage {
+  vente
+  achat
+  achat_vente
 }
 
 model User {
-  id           String     @id @default(uuid())
-  name         String
-  email        String     @unique
-  password     String
-  role         UserRole   @default(vendeur)
-  active       Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  syncStatus   SyncStatus @default(synced)
-  lastSyncedAt DateTime?
-  sales        Sale[]
+  id                 String     @id @default(uuid())
+  name               String
+  email              String     @unique
+  password           String
+  role               UserRole   @default(vendeur)
+  active             Boolean    @default(true)
+  mustChangePassword Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  syncStatus         SyncStatus @default(synced)
+  lastSyncedAt       DateTime?
+  sales              Sale[]
 }
 
 model Category {
@@ -74,14 +88,31 @@ model Product {
   sellPrice      Float
   quantity       Int             @default(0)
   alertThreshold Int             @default(5)
+  usage          ProductUsage    @default(achat_vente)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   syncStatus     SyncStatus      @default(synced)
   lastSyncedAt   DateTime?
   category       Category        @relation(fields: [categoryId], references: [id])
-  saleItems      SaleItem[]
-  stockMovements StockMovement[]
-  orderItems     OrderItem[]
+  saleItems          SaleItem[]
+  stockMovements     StockMovement[]
+  orderItems         OrderItem[]
+  customerOrderItems CustomerOrderItem[]
+  priceHistory       PriceHistory[]
+}
+
+model PriceHistory {
+  id           String     @id @default(uuid())
+  productId    String
+  oldBuyPrice  Float
+  newBuyPrice  Float
+  oldSellPrice Float
+  newSellPrice Float
+  userId       String?
+  createdAt    DateTime   @default(now())
+  syncStatus   SyncStatus @default(synced)
+  lastSyncedAt DateTime?
+  product      Product    @relation(fields: [productId], references: [id])
 }
 
 model Customer {
@@ -95,6 +126,7 @@ model Customer {
   lastSyncedAt       DateTime?
   sales              Sale[]
   creditTransactions CreditTransaction[]
+  customerOrders     CustomerOrder[]
 }
 
 model Supplier {
@@ -124,6 +156,7 @@ model Sale {
   user          User          @relation(fields: [userId], references: [id])
   customer      Customer?     @relation(fields: [customerId], references: [id])
   items         SaleItem[]
+  customerOrder CustomerOrder?
 }
 
 model SaleItem {
@@ -148,6 +181,7 @@ model SupplierOrder {
   date         DateTime    @default(now())
   total        Float
   status       OrderStatus @default(en_attente)
+  userId       String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   syncStatus   SyncStatus  @default(synced)
@@ -180,6 +214,7 @@ model StockMovement {
   quantity     Int
   date         DateTime          @default(now())
   reason       String
+  userId       String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   syncStatus   SyncStatus        @default(synced)
@@ -212,6 +247,8 @@ model AuditLog {
   entityName   String?
   details      String?
   date         DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   syncStatus   SyncStatus @default(synced)
   lastSyncedAt DateTime?
 }
@@ -223,8 +260,44 @@ model Expense {
   description  String
   date         DateTime   @default(now())
   recurring    Boolean    @default(false)
+  userId       String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   syncStatus   SyncStatus @default(synced)
   lastSyncedAt DateTime?
+}
+
+model CustomerOrder {
+  id           String              @id @default(uuid())
+  customerId   String
+  date         DateTime            @default(now())
+  total        Float
+  deposit      Float               @default(0)
+  status       CustomerOrderStatus @default(en_attente)
+  saleId       String?             @unique
+  note         String?
+  userId       String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  syncStatus   SyncStatus          @default(synced)
+  lastSyncedAt DateTime?
+  customer     Customer            @relation(fields: [customerId], references: [id])
+  sale         Sale?               @relation(fields: [saleId], references: [id])
+  items        CustomerOrderItem[]
+}
+
+model CustomerOrderItem {
+  id              String        @id @default(uuid())
+  customerOrderId String
+  productId       String
+  productName     String
+  quantity        Int
+  unitPrice       Float
+  total           Float
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  syncStatus      SyncStatus    @default(synced)
+  lastSyncedAt    DateTime?
+  customerOrder   CustomerOrder @relation(fields: [customerOrderId], references: [id])
+  product         Product       @relation(fields: [productId], references: [id])
 }

@@ -1,6 +1,8 @@
 import { useState, useMemo, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Pencil, Trash2, Wallet, TrendingDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Plus, Pencil, Trash2, Wallet, TrendingDown, Search, ArrowLeft, Download } from 'lucide-react';
 import { db } from '@/db';
 import type { Expense, ExpenseCategory } from '@/types';
 import { Button } from '@/components/ui/Button';
@@ -9,9 +11,13 @@ import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/Table';
+import { useAuthStore } from '@/stores/authStore';
 import { generateId, nowISO, formatCurrency, formatDate } from '@/lib/utils';
+import { exportCSV } from '@/lib/export';
+import { expenseSchema, validate } from '@/lib/validation';
 import { logAction } from '@/services/auditService';
 import { confirmAction } from '@/stores/confirmStore';
+import { trackDeletion } from '@/services/syncService';
 
 export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
   loyer: 'Loyer',
@@ -28,17 +34,17 @@ export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
 };
 
 const categoryColors: Record<ExpenseCategory, string> = {
-  loyer: 'bg-blue-100 text-blue-700',
-  salaires: 'bg-purple-100 text-purple-700',
-  transport: 'bg-amber-100 text-amber-700',
-  electricite: 'bg-yellow-100 text-yellow-700',
-  eau: 'bg-cyan-100 text-cyan-700',
-  internet_telephone: 'bg-indigo-100 text-indigo-700',
-  equipement: 'bg-slate-100 text-slate-700',
-  entretien: 'bg-emerald-100 text-emerald-700',
-  marketing: 'bg-pink-100 text-pink-700',
-  taxes: 'bg-red-100 text-red-700',
-  autre: 'bg-gray-100 text-gray-700',
+  loyer: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+  salaires: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+  transport: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
+  electricite: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+  eau: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400',
+  internet_telephone: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400',
+  equipement: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300',
+  entretien: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
+  marketing: 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-400',
+  taxes: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+  autre: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
 };
 
 type FilterPeriod = 'this_month' | 'last_month' | '3_months' | 'all';
@@ -69,13 +75,19 @@ const emptyExpense = (): Partial<Expense> => ({
 });
 
 export function ExpensesPage() {
+  const navigate = useNavigate();
+  const currentUser = useAuthStore((s) => s.user);
+  const isGerant = currentUser?.role === 'gerant';
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState<Partial<Expense>>(emptyExpense());
   const [period, setPeriod] = useState<FilterPeriod>('this_month');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [expenseSearch, setExpenseSearch] = useState('');
 
   const allExpenses = useLiveQuery(() => db.expenses.orderBy('date').reverse().toArray()) ?? [];
+  const allUsers = useLiveQuery(() => db.users.toArray()) ?? [];
+  const userMap = new Map(allUsers.map((u) => [u.id, u.name]));
 
   const filterDate = useMemo(() => getFilterDate(period), [period]);
 
@@ -83,9 +95,17 @@ export function ExpensesPage() {
     return allExpenses.filter((e) => {
       if (filterDate && new Date(e.date) < filterDate) return false;
       if (categoryFilter && e.category !== categoryFilter) return false;
+      if (expenseSearch) {
+        const q = expenseSearch.toLowerCase();
+        return (
+          e.description.toLowerCase().includes(q) ||
+          expenseCategoryLabels[e.category].toLowerCase().includes(q) ||
+          (e.userId && (userMap.get(e.userId) ?? '').toLowerCase().includes(q))
+        );
+      }
       return true;
     });
-  }, [allExpenses, filterDate, categoryFilter]);
+  }, [allExpenses, filterDate, categoryFilter, expenseSearch, userMap]);
 
   const totalExpenses = useMemo(
     () => expenses.reduce((sum, e) => sum + e.amount, 0),
@@ -116,6 +136,17 @@ export function ExpensesPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const vResult = validate(expenseSchema, {
+      category: form.category || '',
+      amount: Number(form.amount),
+      description: form.description || '',
+      date: form.date || '',
+      recurring: form.recurring ?? false,
+    });
+    if (!vResult.success) {
+      toast.error(Object.values(vResult.errors)[0]);
+      return;
+    }
     const now = nowISO();
     const dateValue = new Date(form.date + 'T12:00:00').toISOString();
 
@@ -152,6 +183,7 @@ export function ExpensesPage() {
         description: form.description!,
         date: dateValue,
         recurring: form.recurring ?? false,
+        userId: currentUser?.id,
         createdAt: now,
         updatedAt: now,
         syncStatus: 'pending',
@@ -165,6 +197,7 @@ export function ExpensesPage() {
       });
     }
     setModalOpen(false);
+    toast.success(editing ? 'Dépense modifiée' : 'Dépense enregistrée');
   };
 
   const handleDelete = async (expense: Expense) => {
@@ -176,6 +209,7 @@ export function ExpensesPage() {
     });
     if (!ok) return;
     await db.expenses.delete(expense.id);
+    await trackDeletion('expenses', expense.id);
     await logAction({
       action: 'suppression',
       entity: 'depense',
@@ -196,16 +230,49 @@ export function ExpensesPage() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
+          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-text-muted hover:text-text transition-colors" title="Retour">
+            <ArrowLeft size={20} />
+          </button>
           <Wallet size={24} className="text-primary" />
           <h1 className="text-2xl font-bold text-text">Dépenses</h1>
         </div>
-        <Button onClick={openAdd}>
-          <Plus size={18} /> Nouvelle dépense
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const rows = expenses.map((exp) => [
+                formatDate(exp.date),
+                expenseCategoryLabels[exp.category],
+                exp.description,
+                formatCurrency(exp.amount),
+                exp.recurring ? 'Oui' : 'Non',
+              ]);
+              exportCSV('depenses', ['Date', 'Catégorie', 'Description', 'Montant', 'Récurrent'], rows);
+              toast.success('Export CSV téléchargé');
+            }}
+            disabled={expenses.length === 0}
+          >
+            <Download size={16} /> CSV
+          </Button>
+          <Button onClick={openAdd}>
+            <Plus size={18} /> Nouvelle dépense
+          </Button>
+        </div>
+      </div>
+
+      <div className="relative">
+        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+        <input
+          className="w-full pl-10 pr-3 py-2 rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          placeholder="Rechercher par description, catégorie..."
+          value={expenseSearch}
+          onChange={(e) => setExpenseSearch(e.target.value)}
+        />
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {(Object.keys(periodLabels) as FilterPeriod[]).map((p) => (
             <button
               key={p}
@@ -213,7 +280,7 @@ export function ExpensesPage() {
               className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                 period === p
                   ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border text-text-muted hover:bg-slate-50'
+                  : 'border-border text-text-muted hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}
             >
               {periodLabels[p]}
@@ -221,7 +288,7 @@ export function ExpensesPage() {
           ))}
         </div>
         <select
-          className="rounded-lg border border-border px-3 py-2 text-sm"
+          className="rounded-lg border border-border bg-surface text-text px-3 py-2 text-sm"
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
         >
@@ -288,6 +355,7 @@ export function ExpensesPage() {
               <Th>Catégorie</Th>
               <Th>Description</Th>
               <Th>Montant</Th>
+              {isGerant && <Th>Ajouté par</Th>}
               <Th>Récurrent</Th>
               <Th />
             </Tr>
@@ -295,7 +363,7 @@ export function ExpensesPage() {
           <Tbody>
             {expenses.length === 0 ? (
               <Tr>
-                <Td colSpan={6} className="text-center text-text-muted py-8">
+                <Td colSpan={isGerant ? 7 : 6} className="text-center text-text-muted py-8">
                   Aucune dépense enregistrée pour cette période
                 </Td>
               </Tr>
@@ -310,6 +378,9 @@ export function ExpensesPage() {
                   </Td>
                   <Td className="max-w-[200px] truncate">{exp.description}</Td>
                   <Td className="font-semibold text-red-600">{formatCurrency(exp.amount)}</Td>
+                  {isGerant && (
+                    <Td className="text-sm">{exp.userId ? userMap.get(exp.userId) ?? '—' : '—'}</Td>
+                  )}
                   <Td>
                     {exp.recurring ? (
                       <Badge variant="info">Oui</Badge>
@@ -319,10 +390,10 @@ export function ExpensesPage() {
                   </Td>
                   <Td>
                     <div className="flex gap-1">
-                      <button onClick={() => openEdit(exp)} className="p-1.5 rounded hover:bg-slate-100">
+                      <button onClick={() => openEdit(exp)} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700">
                         <Pencil size={16} className="text-text-muted" />
                       </button>
-                      <button onClick={() => handleDelete(exp)} className="p-1.5 rounded hover:bg-red-50">
+                      <button onClick={() => handleDelete(exp)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30">
                         <Trash2 size={16} className="text-danger" />
                       </button>
                     </div>
@@ -361,6 +432,7 @@ export function ExpensesPage() {
             min={0}
             value={form.amount}
             onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+            placeholder="Ex : 15000"
             required
           />
           <Input

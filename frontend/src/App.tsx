@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense, Component, type ReactNode } from 'react';
+import { Toaster } from 'sonner';
 import { useAuthStore } from '@/stores/authStore';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoginPage } from '@/pages/LoginPage';
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 
 const ProductsPage = lazy(() => import('@/pages/ProductsPage').then(m => ({ default: m.ProductsPage })));
@@ -16,10 +18,23 @@ const CategoriesPage = lazy(() => import('@/pages/CategoriesPage').then(m => ({ 
 const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const ExpensesPage = lazy(() => import('@/pages/ExpensesPage').then(m => ({ default: m.ExpensesPage })));
 const AuditPage = lazy(() => import('@/pages/AuditPage').then(m => ({ default: m.AuditPage })));
+const CustomerOrdersPage = lazy(() => import('@/pages/CustomerOrdersPage').then(m => ({ default: m.CustomerOrdersPage })));
+const LowStockPage = lazy(() => import('@/pages/LowStockPage').then(m => ({ default: m.LowStockPage })));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const mustChangePassword = useAuthStore((s) => s.mustChangePassword);
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (mustChangePassword) return <Navigate to="/change-password" replace />;
+  return <>{children}</>;
+}
+
+function ChangePasswordRoute({ children }: { children: ReactNode }) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const mustChangePassword = useAuthStore((s) => s.mustChangePassword);
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!mustChangePassword) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -67,11 +82,13 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 export default function App() {
   return (
     <ErrorBoundary>
+    <Toaster position="top-right" richColors closeButton duration={3500} />
     <ConfirmDialog />
     <BrowserRouter>
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/change-password" element={<ChangePasswordRoute><ChangePasswordPage /></ChangePasswordRoute>} />
           <Route
             element={
               <ProtectedRoute>
@@ -84,10 +101,13 @@ export default function App() {
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="products" element={<ProductsPage />} />
             <Route path="stock" element={<StockPage />} />
+            <Route path="low-stock" element={<LowStockPage />} />
             <Route path="customers" element={<CustomersPage />} />
-            <Route path="suppliers" element={<SuppliersPage />} />
-            <Route path="expenses" element={<ExpensesPage />} />
-            <Route path="reports" element={<ReportsPage />} />
+            <Route path="customer-orders" element={<CustomerOrdersPage />} />
+            <Route path="suppliers" element={<GerantRoute><SuppliersPage /></GerantRoute>} />
+            <Route path="expenses" element={<GerantRoute><ExpensesPage /></GerantRoute>} />
+            <Route path="reports" element={<GerantRoute><ReportsPage /></GerantRoute>} />
+            <Route path="profile" element={<ProfilePage />} />
             <Route
               path="audit"
               element={

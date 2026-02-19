@@ -16,9 +16,7 @@ export async function seedTestData(userId: string) {
   const existingUsers = await db.users.count();
   if (existingUsers === 0) {
     await db.users.bulkAdd([
-      { id: userId, name: 'Administrateur', email: 'admin@store.com', role: 'gerant', active: true, ...s },
-      { id: generateId(), name: 'Vendeur', email: 'vendeur@store.com', role: 'vendeur', active: true, ...s },
-      { id: generateId(), name: 'Awa Diarra', email: 'awa@store.com', role: 'vendeur', active: true, ...s },
+      { id: userId, name: 'Gérant', email: 'admin@store.com', role: 'gerant', active: true, mustChangePassword: true, ...s },
     ]);
   }
 

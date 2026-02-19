@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Package, Users, AlertTriangle, TrendingUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Package, Users, AlertTriangle, TrendingUp, ChevronRight } from 'lucide-react';
 import { db } from '@/db';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { formatCurrency } from '@/lib/utils';
@@ -9,26 +10,37 @@ function StatCard({
   label,
   value,
   color,
+  onClick,
 }: {
   icon: typeof Package;
   label: string;
   value: string | number;
   color: string;
+  onClick?: () => void;
 }) {
   return (
-    <Card className="flex items-center gap-4">
-      <div className={`p-3 rounded-xl ${color}`}>
+    <button
+      onClick={onClick}
+      className="flex items-center gap-4 w-full text-left rounded-xl border border-border bg-surface p-6 shadow-sm
+        transition-all duration-200 ease-out
+        hover:shadow-lg hover:-translate-y-1 hover:border-primary/30
+        active:translate-y-0 active:shadow-md
+        cursor-pointer group"
+    >
+      <div className={`p-3 rounded-xl ${color} transition-transform duration-200 group-hover:scale-110`}>
         <Icon size={24} className="text-white" />
       </div>
-      <div>
+      <div className="flex-1 min-w-0">
         <p className="text-sm text-text-muted">{label}</p>
         <p className="text-2xl font-bold text-text">{value}</p>
       </div>
-    </Card>
+      <ChevronRight size={18} className="text-text-muted opacity-0 -translate-x-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0" />
+    </button>
   );
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const categories = useLiveQuery(() => db.categories.toArray()) ?? [];
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
@@ -70,41 +82,55 @@ export function DashboardPage() {
           label="Ventes du jour"
           value={formatCurrency(todaySales)}
           color="bg-primary"
+          onClick={() => navigate('/sales')}
         />
         <StatCard
           icon={Package}
           label="Produits"
           value={productCount}
           color="bg-emerald-500"
+          onClick={() => navigate('/products')}
         />
         <StatCard
           icon={Users}
           label="Clients"
           value={customerCount}
           color="bg-blue-500"
+          onClick={() => navigate('/customers')}
         />
         <StatCard
           icon={AlertTriangle}
           label="Stock bas"
           value={lowStockCount}
           color={lowStockCount > 0 ? 'bg-amber-500' : 'bg-slate-400'}
+          onClick={() => navigate('/low-stock')}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardTitle>Dernières ventes</CardTitle>
+        <Card className="transition-all duration-200 hover:shadow-lg hover:border-primary/20">
+          <div className="flex items-center justify-between mb-3">
+            <CardTitle>Dernières ventes</CardTitle>
+            <button
+              onClick={() => navigate('/sales')}
+              className="text-xs text-primary font-medium hover:underline flex items-center gap-0.5"
+            >
+              Voir tout <ChevronRight size={14} />
+            </button>
+          </div>
           {recentSales.length === 0 ? (
             <p className="text-text-muted text-sm">Aucune vente enregistrée</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {recentSales.map((sale) => (
-                <div
+                <button
                   key={sale.id}
-                  className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                  onClick={() => navigate('/sales')}
+                  className="flex items-center justify-between w-full py-2.5 px-2 -mx-2 rounded-lg border-b border-border last:border-0
+                    hover:bg-primary/5 transition-colors duration-150 cursor-pointer text-left group"
                 >
                   <div>
-                    <p className="text-sm font-medium text-text">
+                    <p className="text-sm font-medium text-text group-hover:text-primary transition-colors">
                       Vente #{sale.id.slice(0, 8)}
                     </p>
                     <p className="text-xs text-text-muted">
@@ -114,31 +140,43 @@ export function DashboardPage() {
                   <span className="font-semibold text-text">
                     {formatCurrency(sale.total)}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </Card>
 
-        <Card>
-          <CardTitle>Alertes stock bas</CardTitle>
+        <Card className="transition-all duration-200 hover:shadow-lg hover:border-primary/20">
+          <div className="flex items-center justify-between mb-3">
+            <CardTitle>Alertes stock bas</CardTitle>
+            <button
+              onClick={() => navigate('/low-stock')}
+              className="text-xs text-primary font-medium hover:underline flex items-center gap-0.5"
+            >
+              Voir tout <ChevronRight size={14} />
+            </button>
+          </div>
           {lowStockProducts.length === 0 ? (
             <p className="text-text-muted text-sm">Tous les stocks sont suffisants</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {lowStockProducts.map((product) => (
-                <div
+                <button
                   key={product.id}
-                  className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                  onClick={() => navigate('/low-stock')}
+                  className="flex items-center justify-between w-full py-2.5 px-2 -mx-2 rounded-lg border-b border-border last:border-0
+                    hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors duration-150 cursor-pointer text-left group"
                 >
                   <div>
-                    <p className="text-sm font-medium text-text">{product.name}</p>
+                    <p className="text-sm font-medium text-text group-hover:text-amber-700 transition-colors">
+                      {product.name}
+                    </p>
                     <p className="text-xs text-text-muted">{categoryMap.get(product.categoryId) ?? '—'}</p>
                   </div>
                   <span className="text-sm font-semibold text-danger">
                     {product.quantity} / {product.alertThreshold}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}

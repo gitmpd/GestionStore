@@ -11,10 +11,13 @@ import {
   Tag,
   Wallet,
   ScrollText,
+  ClipboardList,
+  UserCircle,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
+import { Logo } from '@/components/ui/Logo';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
@@ -23,11 +26,13 @@ const navItems = [
   { to: '/products', icon: Package, label: 'Produits' },
   { to: '/stock', icon: ArrowRightLeft, label: 'Mouvements de stock' },
   { to: '/customers', icon: Users, label: 'Clients' },
-  { to: '/suppliers', icon: Truck, label: 'Fournisseurs' },
-  { to: '/expenses', icon: Wallet, label: 'Dépenses' },
-  { to: '/reports', icon: BarChart3, label: 'Rapports' },
+  { to: '/customer-orders', icon: ClipboardList, label: 'Commandes clients' },
+  { to: '/suppliers', icon: Truck, label: 'Fournisseurs', role: 'gerant' as const },
+  { to: '/expenses', icon: Wallet, label: 'Dépenses', role: 'gerant' as const },
+  { to: '/reports', icon: BarChart3, label: 'Rapports', role: 'gerant' as const },
   { to: '/audit', icon: ScrollText, label: 'Journal d\'activité', role: 'gerant' as const },
   { to: '/settings', icon: Settings, label: 'Paramètres', role: 'gerant' as const },
+  { to: '/profile', icon: UserCircle, label: 'Mon profil' },
 ];
 
 interface SidebarProps {
@@ -50,8 +55,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
-          <h1 className="text-xl font-bold tracking-tight">GestionStore</h1>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <Logo size="sm" variant="light" />
           <button onClick={onClose} className="lg:hidden p-1 hover:bg-white/10 rounded">
             <X size={20} />
           </button>

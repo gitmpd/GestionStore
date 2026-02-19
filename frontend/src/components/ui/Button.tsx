@@ -3,10 +3,10 @@ import { cn } from '@/lib/utils';
 
 const variants = {
   primary: 'bg-primary text-white hover:bg-primary-dark',
-  secondary: 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+  secondary: 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600',
   danger: 'bg-danger text-white hover:bg-red-600',
-  ghost: 'text-slate-600 hover:bg-slate-100',
-  outline: 'border border-border text-slate-700 hover:bg-slate-50',
+  ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700',
+  outline: 'border border-border text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800',
 } as const;
 
 const sizes = {

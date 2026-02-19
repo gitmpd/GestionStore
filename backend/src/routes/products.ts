@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -34,8 +34,9 @@ router.put('/:id', async (req, res) => {
   res.json(product);
 });
 
-router.delete('/:id', async (req, res) => {
-  await prisma.product.delete({ where: { id: req.params.id } });
+router.delete('/:id', requireRole('gerant'), async (req, res) => {
+  const id = req.params.id as string;
+  await prisma.product.delete({ where: { id } });
   res.status(204).send();
 });
 

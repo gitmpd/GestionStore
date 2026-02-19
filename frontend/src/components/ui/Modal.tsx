@@ -26,7 +26,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
       <div
         className={cn(
-          'relative z-10 w-full max-w-lg rounded-xl bg-surface p-6 shadow-xl mx-4 max-h-[90vh] overflow-y-auto',
+          'relative z-10 w-full max-w-lg rounded-xl bg-surface text-text p-6 shadow-xl mx-4 max-h-[90vh] overflow-y-auto',
           className
         )}
       >
@@ -34,7 +34,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
           <h2 className="text-lg font-semibold text-text">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-text-muted hover:bg-slate-100 transition-colors"
+            className="rounded-lg p-1 text-text-muted hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           >
             <X size={20} />
           </button>

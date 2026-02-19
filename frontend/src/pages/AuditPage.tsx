@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ScrollText, Search, Filter, Download } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ScrollText, Search, Filter, Download, ArrowLeft } from 'lucide-react';
 import { db } from '@/db';
 import type { AuditLog, AuditAction, AuditEntity } from '@/types';
 import { Badge } from '@/components/ui/Badge';
@@ -21,6 +22,8 @@ const actionLabels: Record<AuditAction, string> = {
   paiement: 'Paiement',
   reception_commande: 'Réception commande',
   creation_commande: 'Création commande',
+  livraison_commande: 'Livraison commande',
+  annulation_commande: 'Annulation commande',
   activation: 'Activation',
   desactivation: 'Désactivation',
   depense: 'Dépense',
@@ -38,6 +41,8 @@ const actionVariants: Record<AuditAction, 'success' | 'danger' | 'warning' | 'in
   paiement: 'success',
   reception_commande: 'success',
   creation_commande: 'info',
+  livraison_commande: 'success',
+  annulation_commande: 'danger',
   activation: 'success',
   desactivation: 'danger',
   depense: 'danger',
@@ -52,11 +57,13 @@ const entityLabels: Record<AuditEntity, string> = {
   vente: 'Vente',
   stock: 'Stock',
   commande: 'Commande',
+  commande_client: 'Commande client',
   credit: 'Crédit',
   depense: 'Dépense',
 };
 
 export function AuditPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [entityFilter, setEntityFilter] = useState('');
@@ -123,6 +130,9 @@ export function AuditPage() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
+          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-text-muted hover:text-text transition-colors" title="Retour">
+            <ArrowLeft size={20} />
+          </button>
           <ScrollText size={24} className="text-primary" />
           <h1 className="text-2xl font-bold text-text">Journal d'activité</h1>
         </div>
@@ -139,7 +149,7 @@ export function AuditPage() {
       <div className="relative">
         <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
         <input
-          className="w-full pl-10 pr-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="w-full pl-10 pr-3 py-2 rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           placeholder="Rechercher par utilisateur, entité ou détails..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -152,7 +162,7 @@ export function AuditPage() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-text-muted">Utilisateur</label>
               <select
-                className="rounded-lg border border-border px-3 py-2 text-sm"
+                className="rounded-lg border border-border bg-surface text-text px-3 py-2 text-sm"
                 value={userFilter}
                 onChange={(e) => setUserFilter(e.target.value)}
               >
@@ -165,7 +175,7 @@ export function AuditPage() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-text-muted">Action</label>
               <select
-                className="rounded-lg border border-border px-3 py-2 text-sm"
+                className="rounded-lg border border-border bg-surface text-text px-3 py-2 text-sm"
                 value={actionFilter}
                 onChange={(e) => setActionFilter(e.target.value)}
               >
@@ -178,7 +188,7 @@ export function AuditPage() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-text-muted">Entité</label>
               <select
-                className="rounded-lg border border-border px-3 py-2 text-sm"
+                className="rounded-lg border border-border bg-surface text-text px-3 py-2 text-sm"
                 value={entityFilter}
                 onChange={(e) => setEntityFilter(e.target.value)}
               >
@@ -192,7 +202,7 @@ export function AuditPage() {
               <label className="text-xs font-medium text-text-muted">Date début</label>
               <input
                 type="date"
-                className="rounded-lg border border-border px-3 py-2 text-sm"
+                className="rounded-lg border border-border bg-surface text-text px-3 py-2 text-sm"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
               />
@@ -201,7 +211,7 @@ export function AuditPage() {
               <label className="text-xs font-medium text-text-muted">Date fin</label>
               <input
                 type="date"
-                className="rounded-lg border border-border px-3 py-2 text-sm"
+                className="rounded-lg border border-border bg-surface text-text px-3 py-2 text-sm"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
               />
@@ -247,7 +257,7 @@ export function AuditPage() {
               logs.slice(0, 200).map((log) => (
                 <Tr
                   key={log.id}
-                  className="cursor-pointer hover:bg-slate-50 transition-colors"
+                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                   onClick={() => setSelectedLog(log)}
                 >
                   <Td className="text-text-muted whitespace-nowrap text-xs">
@@ -285,11 +295,11 @@ export function AuditPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-text-muted mb-1">Date et heure</p>
-                <p className="text-sm font-medium">{formatDateTime(selectedLog.date)}</p>
+                <p className="text-sm font-medium text-text">{formatDateTime(selectedLog.date)}</p>
               </div>
               <div>
                 <p className="text-xs text-text-muted mb-1">Utilisateur</p>
-                <p className="text-sm font-medium">{selectedLog.userName}</p>
+                <p className="text-sm font-medium text-text">{selectedLog.userName}</p>
               </div>
               <div>
                 <p className="text-xs text-text-muted mb-1">Action</p>
@@ -299,7 +309,7 @@ export function AuditPage() {
               </div>
               <div>
                 <p className="text-xs text-text-muted mb-1">Entité</p>
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-text">
                   {entityLabels[selectedLog.entity as AuditEntity] ?? selectedLog.entity}
                 </p>
               </div>
@@ -308,14 +318,14 @@ export function AuditPage() {
             {selectedLog.entityName && (
               <div>
                 <p className="text-xs text-text-muted mb-1">Nom de l'élément</p>
-                <p className="text-sm font-semibold">{selectedLog.entityName}</p>
+                <p className="text-sm font-semibold text-text">{selectedLog.entityName}</p>
               </div>
             )}
 
             {selectedLog.details && (
               <div>
                 <p className="text-xs text-text-muted mb-1">Détails</p>
-                <div className="bg-slate-50 rounded-lg p-3 text-sm text-text whitespace-pre-line">
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 text-sm text-text whitespace-pre-line">
                   {selectedLog.details}
                 </div>
               </div>
@@ -324,7 +334,7 @@ export function AuditPage() {
             {selectedLog.entityId && (
               <div>
                 <p className="text-xs text-text-muted mb-1">Identifiant</p>
-                <p className="text-xs font-mono text-text-muted bg-slate-50 rounded px-2 py-1 inline-block">
+                <p className="text-xs font-mono text-text-muted bg-slate-50 dark:bg-slate-800 rounded px-2 py-1 inline-block">
                   {selectedLog.entityId}
                 </p>
               </div>

@@ -1,8 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Plus, Pencil, Trash2, Tag, Search, ArrowLeft } from 'lucide-react';
 import { db } from '@/db';
 import type { Category } from '@/types';
+import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -11,13 +14,20 @@ import { Badge } from '@/components/ui/Badge';
 import { generateId, nowISO } from '@/lib/utils';
 import { logAction } from '@/services/auditService';
 import { confirmAction } from '@/stores/confirmStore';
+import { trackDeletion } from '@/services/syncService';
 
 export function CategoriesPage() {
+  const navigate = useNavigate();
+  const isGerant = useAuthStore((s) => s.user?.role) === 'gerant';
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
   const [name, setName] = useState('');
+  const [search, setSearch] = useState('');
 
-  const categories = useLiveQuery(() => db.categories.orderBy('name').toArray()) ?? [];
+  const allCategories = useLiveQuery(() => db.categories.orderBy('name').toArray()) ?? [];
+  const categories = allCategories.filter(
+    (c) => !search || c.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   const productCounts = useLiveQuery(async () => {
     const products = await db.products.toArray();
@@ -45,11 +55,11 @@ export function CategoriesPage() {
     const trimmed = name.trim();
     if (!trimmed) return;
 
-    const existing = categories.find(
+    const existing = allCategories.find(
       (c) => c.name.toLowerCase() === trimmed.toLowerCase() && c.id !== editing?.id
     );
     if (existing) {
-      alert('Cette catégorie existe déjà');
+      toast.warning('Cette catégorie existe déjà');
       return;
     }
 
@@ -84,12 +94,13 @@ export function CategoriesPage() {
       await logAction({ action: 'creation', entity: 'categorie', entityId: id, entityName: trimmed });
     }
     setModalOpen(false);
+    toast.success(editing ? 'Catégorie modifiée' : 'Catégorie ajoutée');
   };
 
   const handleDelete = async (cat: Category) => {
     const count = productCounts.get(cat.id) ?? 0;
     if (count > 0) {
-      alert(
+      toast.error(
         `Impossible de supprimer « ${cat.name} » : ${count} produit(s) utilisent cette catégorie.`
       );
       return;
@@ -102,6 +113,7 @@ export function CategoriesPage() {
     });
     if (ok) {
       await db.categories.delete(cat.id);
+      await trackDeletion('categories', cat.id);
       await logAction({ action: 'suppression', entity: 'categorie', entityId: cat.id, entityName: cat.name });
     }
   };
@@ -109,10 +121,25 @@ export function CategoriesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-text">Catégories</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-text-muted hover:text-text transition-colors" title="Retour">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-2xl font-bold text-text">Catégories</h1>
+        </div>
         <Button onClick={openAdd}>
           <Plus size={18} /> Ajouter
         </Button>
+      </div>
+
+      <div className="relative">
+        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+        <input
+          className="w-full pl-10 pr-3 py-2 rounded-lg border border-border bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          placeholder="Rechercher une catégorie..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       <div className="bg-surface rounded-xl border border-border">
@@ -128,7 +155,9 @@ export function CategoriesPage() {
             {categories.length === 0 ? (
               <Tr>
                 <Td colSpan={3} className="text-center text-text-muted py-8">
-                  Aucune catégorie. Cliquez sur « Ajouter » pour en créer une.
+                  {allCategories.length === 0
+                    ? 'Aucune catégorie. Cliquez sur « Ajouter » pour en créer une.'
+                    : 'Aucune catégorie ne correspond à la recherche'}
                 </Td>
               </Tr>
             ) : (
@@ -151,16 +180,18 @@ export function CategoriesPage() {
                       <div className="flex gap-1">
                         <button
                           onClick={() => openEdit(cat)}
-                          className="p-1.5 rounded hover:bg-slate-100"
+                          className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
                         >
                           <Pencil size={16} className="text-text-muted" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(cat)}
-                          className="p-1.5 rounded hover:bg-red-50"
-                        >
-                          <Trash2 size={16} className="text-danger" />
-                        </button>
+                        {isGerant && (
+                          <button
+                            onClick={() => handleDelete(cat)}
+                            className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30"
+                          >
+                            <Trash2 size={16} className="text-danger" />
+                          </button>
+                        )}
                       </div>
                     </Td>
                   </Tr>

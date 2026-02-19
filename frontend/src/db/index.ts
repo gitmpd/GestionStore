@@ -3,6 +3,7 @@ import type {
   User,
   Category,
   Product,
+  PriceHistory,
   Customer,
   Supplier,
   Sale,
@@ -13,6 +14,8 @@ import type {
   CreditTransaction,
   AuditLog,
   Expense,
+  CustomerOrder,
+  CustomerOrderItem,
 } from '@/types';
 
 class StoreDB extends Dexie {
@@ -29,6 +32,10 @@ class StoreDB extends Dexie {
   orderItems!: EntityTable<OrderItem, 'id'>;
   stockMovements!: EntityTable<StockMovement, 'id'>;
   creditTransactions!: EntityTable<CreditTransaction, 'id'>;
+  customerOrders!: EntityTable<CustomerOrder, 'id'>;
+  customerOrderItems!: EntityTable<CustomerOrderItem, 'id'>;
+  priceHistory!: EntityTable<PriceHistory, 'id'>;
+  syncDeletions!: EntityTable<{ id: string; table: string; recordId: string; deletedAt: string }, 'id'>;
 
   constructor() {
     super('GestionStoreDB');
@@ -72,6 +79,27 @@ class StoreDB extends Dexie {
 
     this.version(8).stores({
       sales: 'id, userId, customerId, date, status, deleted, syncStatus',
+    });
+
+    this.version(9).stores({
+      users: 'id, name, email, role, active, deleted, mustChangePassword, syncStatus',
+    });
+
+    this.version(10).stores({
+      products: 'id, name, barcode, categoryId, usage, syncStatus',
+    });
+
+    this.version(11).stores({
+      customerOrders: 'id, customerId, date, status, saleId, syncStatus',
+      customerOrderItems: 'id, customerOrderId, productId, syncStatus',
+    });
+
+    this.version(12).stores({
+      syncDeletions: 'id, table, recordId',
+    });
+
+    this.version(13).stores({
+      priceHistory: 'id, productId, createdAt, syncStatus',
     });
   }
 }

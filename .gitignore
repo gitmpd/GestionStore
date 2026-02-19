@@ -4,6 +4,12 @@ dist-ssr/
 *.local
 *.log
 .env
+.env.local
+.env.*.local
 .DS_Store
 .vscode/
 .idea/
+*.swp
+*.swo
+*.tsbuildinfo
+coverage/

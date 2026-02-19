@@ -38,6 +38,31 @@ router.post('/login', async (req, res) => {
   }
 });
 
+router.post('/change-password', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { newPassword, name } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères' });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const updateData: Record<string, unknown> = { password: hashedPassword, mustChangePassword: false };
+    if (name && name.trim()) updateData.name = name.trim();
+
+    const user = await prisma.user.update({
+      where: { id: req.userId },
+      data: updateData,
+    });
+
+    const { password: _, ...safeUser } = user;
+    res.json(safeUser);
+  } catch {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 router.post('/register', authenticate, async (req: AuthRequest, res) => {
   try {
     if (req.userRole !== 'gerant') {
@@ -49,7 +74,7 @@ router.post('/register', authenticate, async (req: AuthRequest, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
-      data: { name, email, password: hashedPassword, role: role || 'vendeur' },
+      data: { name, email, password: hashedPassword, role: role || 'vendeur', mustChangePassword: true },
     });
 
     const { password: _, ...safeUser } = user;
@@ -115,6 +140,38 @@ router.patch('/users/:id/toggle', authenticate, async (req: AuthRequest, res) =>
       select: { id: true, name: true, email: true, role: true, active: true, createdAt: true, updatedAt: true, syncStatus: true, lastSyncedAt: true },
     });
     res.json(updated);
+  } catch {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.post('/users/:id/reset-password', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (req.userRole !== 'gerant') {
+      res.status(403).json({ error: 'Seul un gérant peut réinitialiser les mots de passe' });
+      return;
+    }
+    const id = req.params.id as string;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      res.status(404).json({ error: 'Utilisateur non trouvé' });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword, mustChangePassword: true },
+    });
+
+    res.json({ message: 'Mot de passe réinitialisé. L\'utilisateur devra le changer à la prochaine connexion.' });
   } catch {
     res.status(500).json({ error: 'Erreur serveur' });
   }

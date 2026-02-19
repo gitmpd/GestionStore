@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 router.use(authenticate);
+router.use(requireRole('gerant'));
 
 router.get('/', async (_req, res) => {
   const suppliers = await prisma.supplier.findMany({ orderBy: { name: 'asc' } });
