@@ -1,23 +1,26 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticate, requireRole, type AuthRequest } from '../middleware/auth';
+import { prisma } from '../lib/prisma';
+import { authenticate, tenantGuard, requireRole, tid, type AuthRequest } from '../middleware/auth';
+import { checkFeature } from '../middleware/quotaGuard';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(authenticate);
+router.use(tenantGuard);
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req: AuthRequest, res) => {
   const customers = await prisma.customer.findMany({
+    where: { tenantId: tid(req) },
     orderBy: { name: 'asc' },
     include: { creditTransactions: { orderBy: { date: 'desc' }, take: 10 } },
   });
   res.json(customers);
 });
 
-router.get('/:id', async (req, res) => {
-  const customer = await prisma.customer.findUnique({
-    where: { id: req.params.id },
+router.get('/:id', async (req: AuthRequest, res) => {
+  const id = req.params.id as string;
+  const customer = await prisma.customer.findFirst({
+    where: { id, tenantId: tid(req) },
     include: {
       creditTransactions: { orderBy: { date: 'desc' } },
       sales: { orderBy: { date: 'desc' }, take: 20 },
@@ -30,52 +33,59 @@ router.get('/:id', async (req, res) => {
   res.json(customer);
 });
 
-router.post('/', async (req, res) => {
-  const customer = await prisma.customer.create({ data: req.body });
+router.post('/', async (req: AuthRequest, res) => {
+  const customer = await prisma.customer.create({
+    data: { ...req.body, tenantId: tid(req) },
+  });
   res.status(201).json(customer);
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: AuthRequest, res) => {
+  const id = req.params.id as string;
+  const existing = await prisma.customer.findFirst({
+    where: { id, tenantId: tid(req) },
+  });
+  if (!existing) { res.status(404).json({ error: 'Non trouvé' }); return; }
+
   const customer = await prisma.customer.update({
-    where: { id: req.params.id },
+    where: { id },
     data: req.body,
   });
   res.json(customer);
 });
 
-router.delete('/:id', requireRole('gerant'), async (req, res) => {
+router.delete('/:id', requireRole('gerant'), async (req: AuthRequest, res) => {
   const id = req.params.id as string;
+  const existing = await prisma.customer.findFirst({ where: { id, tenantId: tid(req) } });
+  if (!existing) { res.status(404).json({ error: 'Non trouvé' }); return; }
+
   await prisma.creditTransaction.deleteMany({ where: { customerId: id } });
   await prisma.customer.delete({ where: { id } });
   res.status(204).send();
 });
 
-router.post('/:id/credit', async (req, res) => {
+router.post('/:id/credit', async (req: AuthRequest, res) => {
+  const id = req.params.id as string;
   const { amount, type, note } = req.body;
-  const customer = await prisma.customer.findUnique({ where: { id: req.params.id } });
+  const customer = await prisma.customer.findFirst({
+    where: { id, tenantId: tid(req) },
+  });
   if (!customer) {
     res.status(404).json({ error: 'Client non trouvé' });
     return;
   }
 
-  const newBalance =
-    type === 'credit'
-      ? customer.creditBalance + amount
-      : Math.max(0, customer.creditBalance - amount);
+  const newBalance = type === 'credit'
+    ? customer.creditBalance + amount
+    : Math.max(0, customer.creditBalance - amount);
 
   const [updatedCustomer, transaction] = await prisma.$transaction([
     prisma.customer.update({
-      where: { id: req.params.id },
+      where: { id },
       data: { creditBalance: newBalance },
     }),
     prisma.creditTransaction.create({
-      data: {
-        customerId: req.params.id,
-        amount,
-        type,
-        note,
-        date: new Date(),
-      },
+      data: { tenantId: tid(req), customerId: id, amount, type, note, date: new Date() },
     }),
   ]);
 
@@ -84,15 +94,17 @@ router.post('/:id/credit', async (req, res) => {
 
 // --- Customer Orders ---
 
-router.get('/orders/all', async (_req, res) => {
+router.get('/orders/all', checkFeature('customer_orders'), async (req: AuthRequest, res) => {
   const orders = await prisma.customerOrder.findMany({
+    where: { tenantId: tid(req) },
     orderBy: { date: 'desc' },
     include: { items: true, customer: true },
   });
   res.json(orders);
 });
 
-router.post('/:id/orders', async (req, res) => {
+router.post('/:id/orders', checkFeature('customer_orders'), async (req: AuthRequest, res) => {
+  const id = req.params.id as string;
   const { items, deposit, note } = req.body;
   const total = items.reduce(
     (sum: number, item: { quantity: number; unitPrice: number }) =>
@@ -102,11 +114,12 @@ router.post('/:id/orders', async (req, res) => {
 
   const order = await prisma.customerOrder.create({
     data: {
-      customerId: req.params.id,
+      tenantId: tid(req),
+      customerId: id,
       total,
       deposit: deposit || 0,
       note: note || null,
-      items: { create: items },
+      items: { create: items.map((i: any) => ({ ...i, tenantId: tid(req) })) },
     },
     include: { items: true, customer: true },
   });
@@ -114,34 +127,29 @@ router.post('/:id/orders', async (req, res) => {
   res.status(201).json(order);
 });
 
-router.patch('/orders/:orderId/deliver', async (req: AuthRequest, res) => {
+router.patch('/orders/:orderId/deliver', checkFeature('customer_orders'), async (req: AuthRequest, res) => {
   const { paymentMethod } = req.body;
   const orderId = req.params.orderId as string;
-  const order = await prisma.customerOrder.findUnique({
-    where: { id: orderId },
+  const order = await prisma.customerOrder.findFirst({
+    where: { id: orderId, tenantId: tid(req) },
     include: { items: true },
   });
 
-  if (!order) {
-    res.status(404).json({ error: 'Commande non trouvée' });
-    return;
-  }
-  if (order.status !== 'en_attente') {
-    res.status(400).json({ error: 'Seule une commande en attente peut être livrée' });
-    return;
-  }
+  if (!order) { res.status(404).json({ error: 'Commande non trouvée' }); return; }
+  if (order.status !== 'en_attente') { res.status(400).json({ error: 'Seule une commande en attente peut être livrée' }); return; }
 
   const remaining = order.total - order.deposit;
-  const orderItems = order.items;
 
   const sale = await prisma.sale.create({
     data: {
+      tenantId: tid(req),
       userId: req.userId!,
       customerId: order.customerId,
       total: order.total,
       paymentMethod,
       items: {
-        create: orderItems.map((item: { productId: string; productName: string; quantity: number; unitPrice: number; total: number }) => ({
+        create: order.items.map((item) => ({
+          tenantId: tid(req),
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
@@ -160,6 +168,7 @@ router.patch('/orders/:orderId/deliver', async (req: AuthRequest, res) => {
     });
     await prisma.stockMovement.create({
       data: {
+        tenantId: tid(req),
         productId: item.productId,
         productName: item.productName,
         type: 'sortie',
@@ -178,6 +187,7 @@ router.patch('/orders/:orderId/deliver', async (req: AuthRequest, res) => {
     });
     await prisma.creditTransaction.create({
       data: {
+        tenantId: tid(req),
         customerId: order.customerId,
         saleId: sale.id,
         amount: remaining,
@@ -196,20 +206,14 @@ router.patch('/orders/:orderId/deliver', async (req: AuthRequest, res) => {
   res.json(updated);
 });
 
-router.patch('/orders/:orderId/cancel', async (req, res) => {
+router.patch('/orders/:orderId/cancel', checkFeature('customer_orders'), async (req: AuthRequest, res) => {
   const orderId = req.params.orderId as string;
-  const order = await prisma.customerOrder.findUnique({
-    where: { id: orderId },
+  const order = await prisma.customerOrder.findFirst({
+    where: { id: orderId, tenantId: tid(req) },
   });
 
-  if (!order) {
-    res.status(404).json({ error: 'Commande non trouvée' });
-    return;
-  }
-  if (order.status !== 'en_attente') {
-    res.status(400).json({ error: 'Seule une commande en attente peut être annulée' });
-    return;
-  }
+  if (!order) { res.status(404).json({ error: 'Commande non trouvée' }); return; }
+  if (order.status !== 'en_attente') { res.status(400).json({ error: 'Seule une commande en attente peut être annulée' }); return; }
 
   const updated = await prisma.customerOrder.update({
     where: { id: orderId },

@@ -1,17 +1,19 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticate, requireRole, type AuthRequest } from '../middleware/auth';
+import { prisma } from '../lib/prisma';
+import { authenticate, tenantGuard, requireRole, tid, type AuthRequest } from '../middleware/auth';
+import { checkFeature } from '../middleware/quotaGuard';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(authenticate);
+router.use(tenantGuard);
 
-router.get('/', requireRole('gerant'), async (req: AuthRequest, res) => {
+router.get('/', requireRole('gerant', 'super_admin'), checkFeature('audit'), async (req: AuthRequest, res) => {
   try {
     const { userId, action, entity, from, to, limit = '100', offset = '0' } = req.query;
 
     const where: Record<string, unknown> = {};
+    if (tid(req)) where.tenantId = tid(req);
     if (userId) where.userId = userId;
     if (action) where.action = action;
     if (entity) where.entity = entity;

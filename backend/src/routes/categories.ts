@@ -1,20 +1,24 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticate, requireRole } from '../middleware/auth';
+import { prisma } from '../lib/prisma';
+import { authenticate, tenantGuard, requireRole, tid, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(authenticate);
+router.use(tenantGuard);
 
-router.get('/', async (_req, res) => {
-  const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } });
+router.get('/', async (req: AuthRequest, res) => {
+  const categories = await prisma.category.findMany({
+    where: { tenantId: tid(req) },
+    orderBy: { name: 'asc' },
+  });
   res.json(categories);
 });
 
-router.get('/:id', async (req, res) => {
-  const category = await prisma.category.findUnique({
-    where: { id: req.params.id },
+router.get('/:id', async (req: AuthRequest, res) => {
+  const id = req.params.id as string;
+  const category = await prisma.category.findFirst({
+    where: { id, tenantId: tid(req) },
     include: { products: true },
   });
   if (!category) {
@@ -24,9 +28,11 @@ router.get('/:id', async (req, res) => {
   res.json(category);
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   try {
-    const category = await prisma.category.create({ data: { name: req.body.name } });
+    const category = await prisma.category.create({
+      data: { name: req.body.name, tenantId: tid(req) },
+    });
     res.status(201).json(category);
   } catch (err: any) {
     if (err.code === 'P2002') {
@@ -37,19 +43,26 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: AuthRequest, res) => {
+  const id = req.params.id as string;
+  const existing = await prisma.category.findFirst({
+    where: { id, tenantId: tid(req) },
+  });
+  if (!existing) { res.status(404).json({ error: 'Non trouvée' }); return; }
+
   const category = await prisma.category.update({
-    where: { id: req.params.id },
+    where: { id },
     data: { name: req.body.name },
   });
   res.json(category);
 });
 
-router.delete('/:id', requireRole('gerant'), async (req, res) => {
+router.delete('/:id', requireRole('gerant'), async (req: AuthRequest, res) => {
   const id = req.params.id as string;
-  const productCount = await prisma.product.count({
-    where: { categoryId: id },
-  });
+  const existing = await prisma.category.findFirst({ where: { id, tenantId: tid(req) } });
+  if (!existing) { res.status(404).json({ error: 'Non trouvée' }); return; }
+
+  const productCount = await prisma.product.count({ where: { categoryId: id } });
   if (productCount > 0) {
     res.status(400).json({
       error: `Impossible de supprimer : ${productCount} produit(s) utilisent cette catégorie`,

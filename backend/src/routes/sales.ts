@@ -1,15 +1,15 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticate, type AuthRequest } from '../middleware/auth';
+import { prisma } from '../lib/prisma';
+import { authenticate, tenantGuard, tid, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(authenticate);
+router.use(tenantGuard);
 
-router.get('/', async (req, res) => {
+router.get('/', async (req: AuthRequest, res) => {
   const { from, to } = req.query;
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { tenantId: tid(req) };
   if (from || to) {
     where.date = {};
     if (from) (where.date as Record<string, unknown>).gte = new Date(from as string);
@@ -34,11 +34,14 @@ router.post('/', async (req: AuthRequest, res) => {
 
   const sale = await prisma.sale.create({
     data: {
+      tenantId: tid(req),
       userId: req.userId!,
       customerId: customerId || null,
       total,
       paymentMethod,
-      items: { create: items },
+      items: {
+        create: items.map((i: any) => ({ ...i, tenantId: tid(req) })),
+      },
     },
     include: { items: true },
   });
@@ -50,6 +53,7 @@ router.post('/', async (req: AuthRequest, res) => {
     });
     await prisma.stockMovement.create({
       data: {
+        tenantId: tid(req),
         productId: item.productId,
         productName: item.productName,
         type: 'sortie',
@@ -66,6 +70,7 @@ router.post('/', async (req: AuthRequest, res) => {
     });
     await prisma.creditTransaction.create({
       data: {
+        tenantId: tid(req),
         customerId,
         saleId: sale.id,
         amount: total,

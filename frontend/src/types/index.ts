@@ -1,5 +1,44 @@
 export type SyncStatus = 'synced' | 'pending' | 'conflict';
-export type UserRole = 'gerant' | 'vendeur';
+export type UserRole = 'super_admin' | 'gerant' | 'vendeur';
+export type TenantStatus = 'active' | 'suspended' | 'expired';
+export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'cancelled';
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  ownerUserId?: string;
+  status: TenantStatus;
+  trialEndsAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Plan {
+  id: string;
+  name: string;
+  price: number;
+  durationDays: number;
+  maxProducts: number;
+  maxUsers: number;
+  maxSales: number;
+  features: string[];
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface Subscription {
+  id: string;
+  tenantId: string;
+  planId: string;
+  status: SubscriptionStatus;
+  startDate: string;
+  endDate: string;
+  paymentRef?: string;
+  validatedBy?: string;
+  validatedAt?: string;
+  plan?: Plan;
+}
 export type PaymentMethod = 'cash' | 'credit' | 'mobile';
 export type SaleStatus = 'completed' | 'cancelled';
 export type OrderStatus = 'en_attente' | 'recue' | 'annulee';
@@ -16,6 +55,7 @@ interface SyncFields {
 
 export interface User extends SyncFields {
   id: string;
+  tenantId?: string;
   name: string;
   email: string;
   password?: string;

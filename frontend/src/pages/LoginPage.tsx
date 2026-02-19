@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { db } from '@/db';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { generateId, nowISO } from '@/lib/utils';
+
 import { logAction } from '@/services/auditService';
 import { syncAll } from '@/services/syncService';
 import { Logo } from '@/components/ui/Logo';
@@ -19,9 +19,11 @@ export function LoginPage() {
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
 
-  const redirectAfterLogin = (user: { mustChangePassword?: boolean }) => {
+  const redirectAfterLogin = (user: { mustChangePassword?: boolean; role?: string }) => {
     if (user.mustChangePassword) {
       navigate('/change-password');
+    } else if (user.role === 'super_admin') {
+      navigate('/admin');
     } else {
       navigate('/');
     }
@@ -42,7 +44,7 @@ export function LoginPage() {
 
       if (res.ok) {
         const data = await res.json();
-        login(data.user, data.token, data.refreshToken);
+        login(data.user, data.token, data.refreshToken, data.tenant);
         await logAction({ action: 'connexion', entity: 'utilisateur', entityName: data.user.name });
         setSyncStatus('Synchronisation des données…');
         const syncResult = await syncAll({ force: true });
@@ -95,30 +97,7 @@ export function LoginPage() {
         return;
       }
 
-      const isDefault = email === 'admin@store.com' && password === 'admin123';
-      if (isDefault) {
-        const now = nowISO();
-        const existing = await db.users.where('email').equals(email).first();
-        const userData = existing ?? {
-          id: generateId(),
-          name: 'Gérant',
-          email,
-          role: 'gerant' as const,
-          active: true,
-          mustChangePassword: true,
-          createdAt: now,
-          updatedAt: now,
-          syncStatus: 'pending' as const,
-        };
-        if (!existing) await db.users.add(userData);
-        login(userData, 'offline-token', 'offline-refresh');
-        await logAction({ action: 'connexion', entity: 'utilisateur', entityName: 'Gérant', details: `Connexion hors-ligne (défaut): ${reason}` });
-        toast.warning('Mode hors-ligne — les données ne seront pas synchronisées', { duration: 6000 });
-        redirectAfterLogin(userData);
-        return;
-      }
-
-      setError(`Impossible de joindre le serveur (${reason}). Aucun compte local trouvé pour cet email.`);
+      setError(`Impossible de joindre le serveur (${reason}). Connectez-vous en ligne au moins une fois pour activer le mode hors-ligne.`);
     } finally {
       setLoading(false);
     }
