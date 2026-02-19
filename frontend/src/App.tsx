@@ -22,10 +22,27 @@ const CustomerOrdersPage = lazy(() => import('@/pages/CustomerOrdersPage').then(
 const LowStockPage = lazy(() => import('@/pages/LowStockPage').then(m => ({ default: m.LowStockPage })));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
 
+// Public pages
+const LandingPage = lazy(() => import('@/pages/LandingPage').then(m => ({ default: m.LandingPage })));
+const PricingPage = lazy(() => import('@/pages/PricingPage').then(m => ({ default: m.PricingPage })));
+const RegisterPage = lazy(() => import('@/pages/RegisterPage').then(m => ({ default: m.RegisterPage })));
+
+// Super-admin pages
+const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout').then(m => ({ default: m.AdminLayout })));
+const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const AdminTenants = lazy(() => import('@/pages/admin/AdminTenants').then(m => ({ default: m.AdminTenants })));
+const AdminSubscriptions = lazy(() => import('@/pages/admin/AdminSubscriptions').then(m => ({ default: m.AdminSubscriptions })));
+const AdminPlans = lazy(() => import('@/pages/admin/AdminPlans').then(m => ({ default: m.AdminPlans })));
+const AdminFeedback = lazy(() => import('@/pages/admin/AdminFeedback').then(m => ({ default: m.AdminFeedback })));
+
+// Subscription & feedback pages for tenants
+const SubscriptionPage = lazy(() => import('@/pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
+const FeedbackPage = lazy(() => import('@/pages/FeedbackPage').then(m => ({ default: m.FeedbackPage })));
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const mustChangePassword = useAuthStore((s) => s.mustChangePassword);
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/landing" replace />;
   if (mustChangePassword) return <Navigate to="/change-password" replace />;
   return <>{children}</>;
 }
@@ -41,6 +58,24 @@ function ChangePasswordRoute({ children }: { children: ReactNode }) {
 function GerantRoute({ children }: { children: ReactNode }) {
   const user = useAuthStore((s) => s.user);
   if (user?.role !== 'gerant') return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+function SuperAdminRoute({ children }: { children: ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.role !== 'super_admin') return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+function PublicOnlyRoute({ children }: { children: ReactNode }) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  if (isAuthenticated) {
+    if (user?.role === 'super_admin') return <Navigate to="/admin" replace />;
+    return <Navigate to="/" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -87,8 +122,28 @@ export default function App() {
     <BrowserRouter>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          {/* Public pages */}
+          <Route path="/landing" element={<PublicOnlyRoute><LandingPage /></PublicOnlyRoute>} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
+
+          {/* Auth */}
+          <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
           <Route path="/change-password" element={<ChangePasswordRoute><ChangePasswordPage /></ChangePasswordRoute>} />
+
+          {/* Super-admin */}
+          <Route
+            path="/admin"
+            element={<SuperAdminRoute><AdminLayout /></SuperAdminRoute>}
+          >
+            <Route index element={<AdminDashboard />} />
+            <Route path="tenants" element={<AdminTenants />} />
+            <Route path="subscriptions" element={<AdminSubscriptions />} />
+            <Route path="plans" element={<AdminPlans />} />
+            <Route path="feedbacks" element={<AdminFeedback />} />
+          </Route>
+
+          {/* Tenant app */}
           <Route
             element={
               <ProtectedRoute>
@@ -108,24 +163,13 @@ export default function App() {
             <Route path="expenses" element={<GerantRoute><ExpensesPage /></GerantRoute>} />
             <Route path="reports" element={<GerantRoute><ReportsPage /></GerantRoute>} />
             <Route path="profile" element={<ProfilePage />} />
-            <Route
-              path="audit"
-              element={
-                <GerantRoute>
-                  <AuditPage />
-                </GerantRoute>
-              }
-            />
-            <Route
-              path="settings"
-              element={
-                <GerantRoute>
-                  <SettingsPage />
-                </GerantRoute>
-              }
-            />
+            <Route path="subscription" element={<GerantRoute><SubscriptionPage /></GerantRoute>} />
+            <Route path="feedback" element={<FeedbackPage />} />
+            <Route path="audit" element={<GerantRoute><AuditPage /></GerantRoute>} />
+            <Route path="settings" element={<GerantRoute><SettingsPage /></GerantRoute>} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+
+          <Route path="*" element={<Navigate to="/landing" replace />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

@@ -18,7 +18,6 @@ import {
   ArrowLeft,
   KeyRound,
   Download,
-  Store,
   RefreshCw,
 } from 'lucide-react';
 import { db } from '@/db';
@@ -55,8 +54,6 @@ export function SettingsPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', password: '', role: 'vendeur' as UserRole });
   const [editError, setEditError] = useState('');
-
-  const [shopName, setShopName] = useState(localStorage.getItem('shop_name') || '');
 
   const [syncing, setSyncing] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -472,40 +469,6 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        <Card>
-          <CardTitle>
-            <Store size={18} className="inline mr-2 -mt-0.5" />
-            Boutique
-          </CardTitle>
-          <div className="space-y-3 mt-4">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="shopName" className="text-sm font-medium text-text">Nom de la boutique</label>
-              <p className="text-xs text-text-muted">Apparaît sur les reçus d'impression</p>
-              <div className="flex gap-2 mt-1">
-                <Input
-                  id="shopName"
-                  value={shopName}
-                  onChange={(e) => setShopName(e.target.value)}
-                  placeholder="Ex : Boutique Diallo, Super Marché..."
-                />
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const trimmed = shopName.trim();
-                    if (trimmed) {
-                      localStorage.setItem('shop_name', trimmed);
-                    } else {
-                      localStorage.removeItem('shop_name');
-                    }
-                    toast.success('Nom de la boutique enregistré');
-                  }}
-                >
-                  <Check size={16} /> Enregistrer
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Card>
       </div>
 
       {currentUser?.role === 'gerant' && (

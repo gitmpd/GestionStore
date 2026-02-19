@@ -13,6 +13,8 @@ import {
   ScrollText,
   ClipboardList,
   UserCircle,
+  CreditCard,
+  MessageSquare,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -31,6 +33,8 @@ const navItems = [
   { to: '/expenses', icon: Wallet, label: 'Dépenses', role: 'gerant' as const },
   { to: '/reports', icon: BarChart3, label: 'Rapports', role: 'gerant' as const },
   { to: '/audit', icon: ScrollText, label: 'Journal d\'activité', role: 'gerant' as const },
+  { to: '/subscription', icon: CreditCard, label: 'Mon abonnement', role: 'gerant' as const },
+  { to: '/feedback', icon: MessageSquare, label: 'Retours / Plaintes' },
   { to: '/settings', icon: Settings, label: 'Paramètres', role: 'gerant' as const },
   { to: '/profile', icon: UserCircle, label: 'Mon profil' },
 ];
@@ -42,6 +46,7 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
+  const tenant = useAuthStore((s) => s.tenant);
 
   return (
     <>
@@ -87,6 +92,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </nav>
 
         <div className="px-4 py-4 border-t border-white/10">
+          {tenant && <p className="text-xs font-semibold text-white/80 mb-1">{tenant.name}</p>}
           <p className="text-sm text-white/60">
             {user?.name} — {user?.role === 'gerant' ? 'Gérant' : 'Vendeur'}
           </p>

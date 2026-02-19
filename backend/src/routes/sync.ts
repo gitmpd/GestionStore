@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticate, type AuthRequest } from '../middleware/auth';
+import { prisma } from '../lib/prisma';
+import { authenticate, tenantGuard, tid, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(authenticate);
+router.use(tenantGuard);
 
 interface SyncPayload {
   table: string;
@@ -62,6 +62,9 @@ router.post('/', async (req: AuthRequest, res) => {
 
         for (const record of records) {
           const { syncStatus, lastSyncedAt: _, ...data } = record as any;
+          if (tid(req) && !data.tenantId) {
+            data.tenantId = tid(req);
+          }
           try {
             await model.upsert({
               where: { id: data.id },
@@ -75,6 +78,7 @@ router.post('/', async (req: AuthRequest, res) => {
         }
 
         const pullWhere: Record<string, unknown> = {};
+        if (tid(req)) pullWhere.tenantId = tid(req);
         if (lastSyncedAt) {
           const dateField = tablesWithoutUpdatedAt.has(table) ? 'createdAt' : 'updatedAt';
           pullWhere[dateField] = { gt: new Date(lastSyncedAt) };
@@ -95,11 +99,13 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 });
 
-router.get('/status', async (_req, res) => {
+router.get('/status', async (req: AuthRequest, res) => {
   const counts: Record<string, number> = {};
   for (const [tableName, modelName] of Object.entries(tableMap)) {
     try {
-      counts[tableName] = await (prisma as any)[modelName].count();
+      counts[tableName] = await (prisma as any)[modelName].count({
+        where: tid(req) ? { tenantId: tid(req) } : {},
+      });
     } catch {
       counts[tableName] = 0;
     }

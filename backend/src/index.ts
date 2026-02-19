@@ -14,6 +14,11 @@ import { syncRouter } from './routes/sync';
 import { reportsRouter } from './routes/reports';
 import { auditRouter } from './routes/audit';
 import { backupRouter } from './routes/backup';
+import { plansRouter } from './routes/plans';
+import { subscriptionsRouter } from './routes/subscriptions';
+import { tenantRouter } from './routes/tenant';
+import { adminRouter } from './routes/admin';
+import { feedbackRouter } from './routes/feedback';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -45,7 +50,11 @@ const apiLimiter = rateLimit({
 app.use('/api/auth/login', loginLimiter);
 app.use('/api', apiLimiter);
 
+// Public routes
 app.use('/api/auth', authRouter);
+app.use('/api/plans', plansRouter);
+
+// Tenant routes (protected)
 app.use('/api/categories', categoriesRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/customers', customersRouter);
@@ -55,6 +64,12 @@ app.use('/api/sync', syncRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/backup', backupRouter);
+app.use('/api/subscriptions', subscriptionsRouter);
+app.use('/api/tenant', tenantRouter);
+app.use('/api/feedbacks', feedbackRouter);
+
+// Super-admin routes
+app.use('/api/admin', adminRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -79,12 +94,7 @@ app.get('/api/discovery', (_req, res) => {
     }
   }
 
-  res.json({
-    app: 'GestionStore',
-    version: '1.0',
-    port: Number(PORT),
-    addresses,
-  });
+  res.json({ app: 'GestionStore', version: '2.0', port: Number(PORT), addresses });
 });
 
 app.use(errorHandler);

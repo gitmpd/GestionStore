@@ -12,14 +12,6 @@ export async function seedTestData(userId: string) {
   const now = nowISO();
   const s = { createdAt: now, updatedAt: now, syncStatus: 'pending' as const };
 
-  // --- Utilisateurs ---
-  const existingUsers = await db.users.count();
-  if (existingUsers === 0) {
-    await db.users.bulkAdd([
-      { id: userId, name: 'Gérant', email: 'admin@store.com', role: 'gerant', active: true, mustChangePassword: true, ...s },
-    ]);
-  }
-
   // --- Catégories ---
   const catAlimentation = { id: generateId(), name: 'Alimentation', ...s };
   const catBoissons     = { id: generateId(), name: 'Boissons', ...s };

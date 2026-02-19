@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum UserRole {
+  super_admin
   gerant
   vendeur
 }
@@ -54,8 +55,92 @@ enum ProductUsage {
   achat_vente
 }
 
+enum TenantStatus {
+  active
+  suspended
+  expired
+}
+
+enum SubscriptionStatus {
+  pending
+  active
+  expired
+  cancelled
+}
+
+// ── Multi-tenant ──
+
+model Tenant {
+  id           String       @id @default(uuid())
+  name         String
+  slug         String       @unique
+  ownerUserId  String?
+  status       TenantStatus @default(active)
+  trialEndsAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  users              User[]
+  categories         Category[]
+  products           Product[]
+  customers          Customer[]
+  suppliers          Supplier[]
+  sales              Sale[]
+  saleItems          SaleItem[]
+  supplierOrders     SupplierOrder[]
+  orderItems         OrderItem[]
+  stockMovements     StockMovement[]
+  creditTransactions CreditTransaction[]
+  auditLogs          AuditLog[]
+  expenses           Expense[]
+  customerOrders     CustomerOrder[]
+  customerOrderItems CustomerOrderItem[]
+  priceHistory       PriceHistory[]
+  subscriptions      Subscription[]
+  feedbacks          Feedback[]
+}
+
+model Plan {
+  id            String   @id @default(uuid())
+  name          String
+  price         Float
+  durationDays  Int
+  maxProducts   Int
+  maxUsers      Int
+  maxSales      Int      @default(0)
+  features      Json     @default("[]")
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@unique([name, durationDays])
+}
+
+model Subscription {
+  id           String             @id @default(uuid())
+  tenantId     String
+  planId       String
+  status       SubscriptionStatus @default(pending)
+  startDate    DateTime           @default(now())
+  endDate      DateTime
+  paymentRef   String?
+  validatedBy  String?
+  validatedAt  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  plan   Plan   @relation(fields: [planId], references: [id])
+}
+
+// ── Existing models (with tenantId) ──
+
 model User {
   id                 String     @id @default(uuid())
+  tenantId           String?
   name               String
   email              String     @unique
   password           String
@@ -66,21 +151,33 @@ model User {
   updatedAt          DateTime   @updatedAt
   syncStatus         SyncStatus @default(synced)
   lastSyncedAt       DateTime?
-  sales              Sale[]
+
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id])
+  sales     Sale[]
+  feedbacks Feedback[]
+
+  @@index([tenantId])
 }
 
 model Category {
   id           String     @id @default(uuid())
-  name         String     @unique
+  tenantId     String?
+  name         String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   syncStatus   SyncStatus @default(synced)
   lastSyncedAt DateTime?
-  products     Product[]
+
+  tenant   Tenant?   @relation(fields: [tenantId], references: [id])
+  products Product[]
+
+  @@unique([name, tenantId])
+  @@index([tenantId])
 }
 
 model Product {
   id             String          @id @default(uuid())
+  tenantId       String?
   name           String
   barcode        String?
   categoryId     String
@@ -93,16 +190,21 @@ model Product {
   updatedAt      DateTime        @updatedAt
   syncStatus     SyncStatus      @default(synced)
   lastSyncedAt   DateTime?
-  category       Category        @relation(fields: [categoryId], references: [id])
+
+  tenant             Tenant?             @relation(fields: [tenantId], references: [id])
+  category           Category            @relation(fields: [categoryId], references: [id])
   saleItems          SaleItem[]
   stockMovements     StockMovement[]
   orderItems         OrderItem[]
   customerOrderItems CustomerOrderItem[]
   priceHistory       PriceHistory[]
+
+  @@index([tenantId])
 }
 
 model PriceHistory {
   id           String     @id @default(uuid())
+  tenantId     String?
   productId    String
   oldBuyPrice  Float
   newBuyPrice  Float
@@ -112,11 +214,16 @@ model PriceHistory {
   createdAt    DateTime   @default(now())
   syncStatus   SyncStatus @default(synced)
   lastSyncedAt DateTime?
-  product      Product    @relation(fields: [productId], references: [id])
+
+  tenant  Tenant?  @relation(fields: [tenantId], references: [id])
+  product Product  @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
 }
 
 model Customer {
   id                 String              @id @default(uuid())
+  tenantId           String?
   name               String
   phone              String
   creditBalance      Float               @default(0)
@@ -124,13 +231,18 @@ model Customer {
   updatedAt          DateTime            @updatedAt
   syncStatus         SyncStatus          @default(synced)
   lastSyncedAt       DateTime?
+
+  tenant             Tenant?             @relation(fields: [tenantId], references: [id])
   sales              Sale[]
   creditTransactions CreditTransaction[]
   customerOrders     CustomerOrder[]
+
+  @@index([tenantId])
 }
 
 model Supplier {
   id           String          @id @default(uuid())
+  tenantId     String?
   name         String
   phone        String
   address      String          @default("")
@@ -138,11 +250,16 @@ model Supplier {
   updatedAt    DateTime        @updatedAt
   syncStatus   SyncStatus      @default(synced)
   lastSyncedAt DateTime?
-  orders       SupplierOrder[]
+
+  tenant Tenant?         @relation(fields: [tenantId], references: [id])
+  orders SupplierOrder[]
+
+  @@index([tenantId])
 }
 
 model Sale {
   id            String        @id @default(uuid())
+  tenantId      String?
   userId        String
   customerId    String?
   date          DateTime      @default(now())
@@ -153,14 +270,19 @@ model Sale {
   updatedAt     DateTime      @updatedAt
   syncStatus    SyncStatus    @default(synced)
   lastSyncedAt  DateTime?
+
+  tenant        Tenant?       @relation(fields: [tenantId], references: [id])
   user          User          @relation(fields: [userId], references: [id])
   customer      Customer?     @relation(fields: [customerId], references: [id])
   items         SaleItem[]
   customerOrder CustomerOrder?
+
+  @@index([tenantId])
 }
 
 model SaleItem {
   id           String     @id @default(uuid())
+  tenantId     String?
   saleId       String
   productId    String
   productName  String
@@ -171,12 +293,17 @@ model SaleItem {
   updatedAt    DateTime   @updatedAt
   syncStatus   SyncStatus @default(synced)
   lastSyncedAt DateTime?
-  sale         Sale       @relation(fields: [saleId], references: [id])
-  product      Product    @relation(fields: [productId], references: [id])
+
+  tenant  Tenant?  @relation(fields: [tenantId], references: [id])
+  sale    Sale     @relation(fields: [saleId], references: [id])
+  product Product  @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
 }
 
 model SupplierOrder {
   id           String      @id @default(uuid())
+  tenantId     String?
   supplierId   String
   date         DateTime    @default(now())
   total        Float
@@ -186,12 +313,17 @@ model SupplierOrder {
   updatedAt    DateTime    @updatedAt
   syncStatus   SyncStatus  @default(synced)
   lastSyncedAt DateTime?
-  supplier     Supplier    @relation(fields: [supplierId], references: [id])
-  items        OrderItem[]
+
+  tenant   Tenant?     @relation(fields: [tenantId], references: [id])
+  supplier Supplier    @relation(fields: [supplierId], references: [id])
+  items    OrderItem[]
+
+  @@index([tenantId])
 }
 
 model OrderItem {
   id           String        @id @default(uuid())
+  tenantId     String?
   orderId      String
   productId    String
   productName  String
@@ -202,12 +334,17 @@ model OrderItem {
   updatedAt    DateTime      @updatedAt
   syncStatus   SyncStatus    @default(synced)
   lastSyncedAt DateTime?
-  order        SupplierOrder @relation(fields: [orderId], references: [id])
-  product      Product       @relation(fields: [productId], references: [id])
+
+  tenant  Tenant?       @relation(fields: [tenantId], references: [id])
+  order   SupplierOrder @relation(fields: [orderId], references: [id])
+  product Product       @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
 }
 
 model StockMovement {
   id           String            @id @default(uuid())
+  tenantId     String?
   productId    String
   productName  String
   type         StockMovementType
@@ -219,11 +356,16 @@ model StockMovement {
   updatedAt    DateTime          @updatedAt
   syncStatus   SyncStatus        @default(synced)
   lastSyncedAt DateTime?
-  product      Product           @relation(fields: [productId], references: [id])
+
+  tenant  Tenant?  @relation(fields: [tenantId], references: [id])
+  product Product  @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
 }
 
 model CreditTransaction {
   id           String     @id @default(uuid())
+  tenantId     String?
   customerId   String
   saleId       String?
   amount       Float
@@ -234,11 +376,16 @@ model CreditTransaction {
   updatedAt    DateTime   @updatedAt
   syncStatus   SyncStatus @default(synced)
   lastSyncedAt DateTime?
-  customer     Customer   @relation(fields: [customerId], references: [id])
+
+  tenant   Tenant?  @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId])
 }
 
 model AuditLog {
   id           String     @id @default(uuid())
+  tenantId     String?
   userId       String
   userName     String
   action       String
@@ -251,10 +398,15 @@ model AuditLog {
   updatedAt    DateTime   @updatedAt
   syncStatus   SyncStatus @default(synced)
   lastSyncedAt DateTime?
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
 }
 
 model Expense {
   id           String     @id @default(uuid())
+  tenantId     String?
   category     String
   amount       Float
   description  String
@@ -265,10 +417,50 @@ model Expense {
   updatedAt    DateTime   @updatedAt
   syncStatus   SyncStatus @default(synced)
   lastSyncedAt DateTime?
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+enum FeedbackStatus {
+  ouvert
+  en_cours
+  resolu
+  ferme
+}
+
+enum FeedbackType {
+  plainte
+  suggestion
+  bug
+  autre
+}
+
+model Feedback {
+  id          String         @id @default(uuid())
+  tenantId    String?
+  userId      String
+  userName    String
+  type        FeedbackType   @default(plainte)
+  subject     String
+  message     String
+  status      FeedbackStatus @default(ouvert)
+  adminReply  String?
+  repliedAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  user   User    @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
 }
 
 model CustomerOrder {
   id           String              @id @default(uuid())
+  tenantId     String?
   customerId   String
   date         DateTime            @default(now())
   total        Float
@@ -281,13 +473,18 @@ model CustomerOrder {
   updatedAt    DateTime            @updatedAt
   syncStatus   SyncStatus          @default(synced)
   lastSyncedAt DateTime?
-  customer     Customer            @relation(fields: [customerId], references: [id])
-  sale         Sale?               @relation(fields: [saleId], references: [id])
-  items        CustomerOrderItem[]
+
+  tenant   Tenant?             @relation(fields: [tenantId], references: [id])
+  customer Customer            @relation(fields: [customerId], references: [id])
+  sale     Sale?               @relation(fields: [saleId], references: [id])
+  items    CustomerOrderItem[]
+
+  @@index([tenantId])
 }
 
 model CustomerOrderItem {
   id              String        @id @default(uuid())
+  tenantId        String?
   customerOrderId String
   productId       String
   productName     String
@@ -298,6 +495,10 @@ model CustomerOrderItem {
   updatedAt       DateTime      @updatedAt
   syncStatus      SyncStatus    @default(synced)
   lastSyncedAt    DateTime?
-  customerOrder   CustomerOrder @relation(fields: [customerOrderId], references: [id])
-  product         Product       @relation(fields: [productId], references: [id])
+
+  tenant        Tenant?       @relation(fields: [tenantId], references: [id])
+  customerOrder CustomerOrder @relation(fields: [customerOrderId], references: [id])
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
 }
