@@ -22,6 +22,17 @@ if [ ! -f "backend/.env" ]; then
     echo ""
 fi
 
+# Si DATABASE_URL est renseignée dans backend/.env, tenter d'exécuter les migrations et seeds
+if grep -q "DATABASE_URL" backend/.env 2>/dev/null; then
+    echo ""
+    echo "[INFO] DATABASE_URL détectée dans backend/.env — exécution des migrations et seeds (si possible)"
+    cd "$SCRIPT_DIR/backend"
+    npx prisma migrate deploy || echo "[WARN] prisma migrate deploy a échoué — vérifiez la connexion à la base"
+    npm run db:seed 2>/dev/null || echo "[INFO] script db:seed non trouvé ou a échoué"
+    npx tsx prisma/seed-saas.ts 2>/dev/null || echo "[INFO] seed-saas non exécuté (optionnel)"
+    cd "$SCRIPT_DIR"
+fi
+
 LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "non disponible")
 
 echo "[1/2] Démarrage du backend (port 3001)..."
@@ -53,10 +64,6 @@ echo ""
 echo "  Frontend : http://localhost:5173"
 echo "  Backend  : http://localhost:3001"
 echo "  Réseau   : http://${LOCAL_IP}:5173"
-echo ""
-echo "  Comptes par défaut :"
-echo "  Gérant  : admin@store.com / admin123"
-echo "  Vendeur : vendeur@store.com / vendeur123"
 echo ""
 echo "  Appuyez sur Ctrl+C pour tout arrêter."
 echo "============================================"

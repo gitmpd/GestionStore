@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Menu, LogOut, Wifi, WifiOff, Moon, Sun, Bell, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Menu, LogOut, Wifi, WifiOff, Moon, Sun, Bell, AlertTriangle, RefreshCw, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
@@ -16,6 +16,7 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
+  const tenant = useAuthStore((s) => s.tenant);
   const isOnline = useOnlineStatus();
   const { theme, toggle } = useThemeStore();
   const [notifOpen, setNotifOpen] = useState(false);
@@ -46,6 +47,18 @@ export function Header({ onMenuClick }: HeaderProps) {
         <Menu size={22} className="text-text" />
       </button>
 
+      {/* Tenant name shown just after the sidebar/menu button */}
+      <div className="ml-3 hidden md:flex items-center">
+        {tenant?.name && (
+          <div className="inline-flex items-center gap-3 bg-primary/5 border border-primary/10 text-sm rounded-full px-3 py-1 shadow-sm">
+            <Store size={16} className="text-primary" />
+            <div className="flex flex-col leading-tight">
+              <span className="text-xs text-text-muted">I Danse,</span>
+              <span className="font-semibold text-primary break-words" title={tenant.name}>{tenant.name}</span>
+            </div>
+          </div>
+        )}
+      </div>
       <div className="flex-1" />
 
       <div className="flex items-center gap-2">

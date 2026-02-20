@@ -106,7 +106,6 @@ http://localhost:5173
 | Rôle    | Email              | Mot de passe |
 |---------|--------------------|--------------|
 | Gérant  | admin@store.com    | admin123     |
-| Vendeur | vendeur@store.com  | vendeur123   |
 
 > Après connexion, allez dans **Paramètres > Données** et cliquez **"Charger les données de test"** pour remplir l'application avec des exemples.
 
@@ -255,7 +254,13 @@ PORT=3001
 cd backend
 npx prisma migrate deploy    # Créer les tables
 npm run db:seed              # Créer l'utilisateur admin
+npx tsx prisma/seed-saas.ts # Créer l'utilisateur Super admin en mode Saas
 ```
+
+Remarques :
+- Si `backend/.env` n'existe pas, copiez `backend/.env.example` puis éditez `backend/.env` pour renseigner `DATABASE_URL`, `JWT_SECRET` et `JWT_REFRESH_SECRET`.
+- Les commandes `prisma migrate deploy` et les scripts de seed nécessitent que PostgreSQL soit accessible via `DATABASE_URL`. Si la base n'est pas configurée, ces commandes échoueront — dans ce cas, démarrez l'application en mode frontend seul (voir "Installation rapide").
+- Le script `prisma/seed-saas.ts` est optionnel : il crée des plans et un super-admin (email : `superadmin@gestionstore.com`, mot de passe : `SuperAdmin2026!`) pour les déploiements multi-tenant.
 
 ### Étape 4 : Démarrer tout
 

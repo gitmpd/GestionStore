@@ -60,6 +60,31 @@ cd "$SCRIPT_DIR/backend"
 npx prisma generate 2>/dev/null || echo "[!] Prisma generate ignoré (normal si pas de base de données configurée)"
 echo "[OK] Client Prisma prêt."
 
+# Si le fichier .env du backend est absent, copier l'exemple et demander à l'utilisateur de le vérifier
+if [ ! -f "$SCRIPT_DIR/backend/.env" ] && [ -f "$SCRIPT_DIR/backend/.env.example" ]; then
+    echo ""
+    echo "[INFO] backend/.env absent — copie de .env.example -> backend/.env"
+    cp "$SCRIPT_DIR/backend/.env.example" "$SCRIPT_DIR/backend/.env"
+    echo "Veuillez éditer backend/.env pour ajuster DATABASE_URL et secrets si nécessaire."
+fi
+
+# Si DATABASE_URL est présent dans backend/.env, tenter d'appliquer les migrations et d'exécuter le seed
+if grep -q "DATABASE_URL" "$SCRIPT_DIR/backend/.env" 2>/dev/null; then
+    echo ""
+    echo "[INFO] DATABASE_URL détectée dans backend/.env — exécution des migrations et seed (si possible)"
+    cd "$SCRIPT_DIR/backend"
+    if command -v npx >/dev/null 2>&1; then
+        echo "-> Exécution : npx prisma migrate deploy"
+        npx prisma migrate deploy || echo "[WARN] prisma migrate deploy a échoué — vérifiez backend/.env et la connexion à la base de données"
+        echo "-> Exécution : npm run db:seed (si disponible)"
+        npm run db:seed 2>/dev/null || echo "[INFO] script db:seed non trouvé ou a échoué (continuation)"
+        echo "-> Exécution : npx tsx prisma/seed-saas.ts (optionnel)"
+        npx tsx prisma/seed-saas.ts 2>/dev/null || echo "[INFO] seed-saas non exécuté (optionnel)"
+    else
+        echo "[WARN] npx non trouvé — impossible d'exécuter les migrations/seed depuis ce script."
+    fi
+fi
+
 cd "$SCRIPT_DIR"
 
 echo ""
@@ -75,8 +100,4 @@ echo "  ./start-all.sh"
 echo ""
 echo "Pour déployer avec Docker :"
 echo "  docker compose up -d --build"
-echo ""
-echo "Comptes par défaut (mode hors-ligne) :"
-echo "  Gérant  : admin@store.com / admin123"
-echo "  Vendeur : vendeur@store.com / vendeur123"
 echo ""

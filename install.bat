@@ -52,6 +52,26 @@ call npx prisma generate 2>nul
 echo [OK] Client Prisma pret.
 cd ..
 
+rem Si backend\.env absent, copier .env.example
+if not exist backend\.env if exist backend\.env.example (
+    echo.
+    echo [INFO] backend\.env absent - copie de .env.example -> backend\.env
+    copy backend\.env.example backend\.env >nul
+    echo Veuillez editer backend\.env pour ajuster DATABASE_URL et secrets si necessaire.
+)
+
+rem Si DATABASE_URL present dans backend\.env, tenter migrations et seed
+findstr /R /C:"DATABASE_URL" backend\.env >nul 2>&1
+if %errorlevel%==0 (
+    echo.
+    echo [INFO] DATABASE_URL detectee dans backend\.env - execution des migrations et seed (si possible)
+    cd backend
+    call npx prisma migrate deploy 2>nul || echo [WARN] prisma migrate deploy a echoue - verifiez backend\.env et la connexion DB
+    call npm run db:seed 2>nul || echo [INFO] script db:seed non trouve ou a echoue
+    call npx tsx prisma/seed-saas.ts 2>nul || echo [INFO] seed-saas non execute (optionnel)
+    cd ..
+)
+
 echo.
 echo ============================================
 echo   Installation terminee avec succes !
@@ -68,6 +88,5 @@ echo   docker compose up -d --build
 echo.
 echo Comptes par defaut (mode hors-ligne) :
 echo   Gerant  : admin@store.com / admin123
-echo   Vendeur : vendeur@store.com / vendeur123
 echo.
 pause

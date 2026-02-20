@@ -56,7 +56,12 @@ export function ChangePasswordPage() {
         );
         clearMustChangePassword();
         await logAction({ action: 'modification', entity: 'utilisateur', entityName: trimmedName || user?.name, details: `Première connexion — ${trimmedName ? 'Nom + mot de passe modifiés' : 'Mot de passe modifié'}` });
-        navigate('/');
+        // Redirect super-admin to admin dashboard, otherwise to tenant dashboard
+        if (updatedUser.role === 'super_admin' || user?.role === 'super_admin') {
+          navigate('/admin');
+        } else {
+          navigate('/');
+        }
         return;
       }
 
@@ -79,7 +84,11 @@ export function ChangePasswordPage() {
         );
         clearMustChangePassword();
         await logAction({ action: 'modification', entity: 'utilisateur', entityName: trimmedName || user.name, details: 'Première connexion (hors-ligne)' });
-        navigate('/');
+        if (user?.role === 'super_admin') {
+          navigate('/admin');
+        } else {
+          navigate('/');
+        }
       }
     } finally {
       setLoading(false);

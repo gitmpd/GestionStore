@@ -68,7 +68,7 @@ export function PricingPage() {
     <div className="min-h-screen bg-surface text-text">
       <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur border-b border-border">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/landing" className="flex items-center gap-2">
             <Logo size="sm" variant="dark" />
           </Link>
           <div className="flex items-center gap-3">
@@ -84,7 +84,7 @@ export function PricingPage() {
 
       <section className="py-16 px-4">
         <div className="max-w-5xl mx-auto">
-          <Link to="/" className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text mb-8 transition-colors">
+          <Link to="/landing" className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text mb-8 transition-colors">
             <ArrowLeft size={16} /> Retour
           </Link>
           <h1 className="text-3xl sm:text-4xl font-bold text-center mb-3">Nos tarifs</h1>
@@ -221,7 +221,9 @@ export function PricingPage() {
 
       <footer className="border-t border-border py-8 px-4">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <Logo size="sm" variant="dark" />
+          <Link to="/landing">
+            <Logo size="sm" variant="dark" />
+          </Link>
           <p className="text-sm text-text-muted">&copy; {new Date().getFullYear()} Djamatigui — Tous droits réservés</p>
         </div>
       </footer>

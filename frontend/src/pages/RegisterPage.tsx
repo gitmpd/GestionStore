@@ -67,7 +67,7 @@ export function RegisterPage() {
     <div className="min-h-screen bg-surface flex flex-col">
       <header className="border-b border-border px-4 py-3">
         <div className="max-w-md mx-auto flex items-center justify-between">
-          <Link to="/">
+          <Link to="/landing">
             <Logo size="sm" variant="dark" />
           </Link>
           <Link to="/login" className="text-sm text-primary hover:underline">
@@ -79,7 +79,7 @@ export function RegisterPage() {
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
           <Link
-            to="/"
+            to="/landing"
             className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text mb-6 transition-colors"
           >
             <ArrowLeft size={16} /> Retour

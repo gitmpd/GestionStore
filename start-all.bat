@@ -21,6 +21,18 @@ if not exist "backend\.env" (
     echo.
 )
 
+rem Si DATABASE_URL presente dans backend\.env, executer migrations et seeds
+findstr /R /C:"DATABASE_URL" backend\.env >nul 2>&1
+if %errorlevel%==0 (
+    echo.
+    echo [INFO] DATABASE_URL detectee dans backend\.env - execution des migrations et seeds (si possible)
+    cd backend
+    call npx prisma migrate deploy 2>nul || echo [WARN] prisma migrate deploy a echoue - verifiez la connexion a la base
+    call npm run db:seed 2>nul || echo [INFO] script db:seed non trouve ou a echoue
+    call npx tsx prisma/seed-saas.ts 2>nul || echo [INFO] seed-saas non execute (optionnel)
+    cd ..
+)
+
 echo Demarrage du backend (port 3001)...
 start "GestionStore Backend" cmd /c "cd backend && npm run dev"
 
@@ -33,10 +45,6 @@ echo   Tout est lance !
 echo.
 echo   Frontend : http://localhost:5173
 echo   Backend  : http://localhost:3001
-echo.
-echo   Comptes par defaut :
-echo   Gerant  : admin@store.com / admin123
-echo   Vendeur : vendeur@store.com / vendeur123
 echo.
 echo   Fermez les fenetres pour arreter.
 echo ============================================
